@@ -23,6 +23,8 @@ def uploadTradFile(file,username):
         inp['نام شعبه مشتری'] = inp['نام شعبه مشتری'].fillna('-')
         inp['نماد سپرده گذاری'] = inp['نماد سپرده گذاری'].fillna(inp['نماد'])
         inp['گروه مشتری'] = inp['گروه مشتری'].fillna('-')
+        inp['تاریخ معامله عددی'] = inp['تاریخ معامله'].replace('/','')
+        inp['تاریخ معامله عددی'] = [int(x) for x in inp['تاریخ معامله عددی']]
         missColumns = inp.isnull().sum().sum()
         if missColumns == 0:
             date = set(inp['تاریخ معامله'])
@@ -58,6 +60,11 @@ def customerNames(usename):
         data = ''
     return json.dumps({'theresponse':theresponse, 'msg':msg, 'data':data})
 
+
+username = 'hakimian'
+customerName = 'حمید مولائی فرد'
+fromDate =''
+toDate = '1401/03/18'
 '''
 این تابع  وضعیت یک مشتری را باز میگرداند
 '''
