@@ -1,9 +1,11 @@
 from flask import Flask, request
 import json
 from flask_cors import CORS
+from matplotlib.pyplot import get
 import pymongo
 from timeir import *
-
+import pandas as pd
+from PortfolioAsset import *
 
 client = pymongo.MongoClient()
 farasahmDb = client['farasahm']
@@ -47,11 +49,27 @@ def account():
         eft = int(user['eft'])>=today()
         stocks = int(user['stocks'])>=today()
         databack = {'portfoli':portfoli, 'eft':eft, 'stocks':stocks}
-
     dic = {'replay':replay, 'msg':msg, 'databack':databack}
     return json.dumps(dic)
 
 
+@app.route('/portfoli/update',methods = ['POST', 'GET'])
+def portfoli_update():
+    username = request.form.get('username')
+    return uploadTradFile(request.files['filetrade'],username)
+
+@app.route('/portfoli/customerlist',methods = ['POST', 'GET'])
+def portfoli_customerlist():
+    data = request.get_json()
+    username = data['username']
+    return customerNames(username)
+
+@app.route('/portfoli/customerreview',methods = ['POST', 'GET'])
+def portfoli_customerreview():
+    data = request.get_json()
+    username = data['username']
+    customer = data['customer']
+    return customerreview(username, customer)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)
