@@ -4,6 +4,7 @@ import pymongo
 from general import *
 import numpy as np
 
+
 client = pymongo.MongoClient()
 portfolio = client['farasahm']
 
@@ -62,9 +63,8 @@ def customerNames(usename):
     return json.dumps({'replay':theresponse, 'msg':msg, 'databack':data})
 
 
-def customerreview(username, customer):
+def customerreviewf(username, customer):
     df = pd.DataFrame(pd.DataFrame(portfolio[username+'_'+'trad'].find({'عنوان مشتری':customer})))
-    print(df)
     profileCustomer = {
         'شناسه ملی':str(df['شناسه ملی'][0]),
         'کد بورسی':str(df['کد بورسی'][0]),
@@ -86,12 +86,15 @@ def customerreview(username, customer):
     df['تعداد'] = df['تعداد_خرید'] - df['تعداد_فروش']
     df['ارزش معامله'] = df['ارزش معامله_خرید'] - df['ارزش معامله_فروش']
     df = df.replace(np.nan,0)
-    nobuy = list(df[df['تعداد_خرید']==0].index)
-    if len(nobuy)>0:
-        msg = 'این مشتری تعدادی فروش بدون خرید داشته'
-        replay = False
-        databack = nobuy
-        return json.dumps({'msg':msg, 'replay':replay, 'databack':databack, 'code':'NoBuy'})
-    else:
-        return json.dumps({'msg':'بدون مشکل', 'replay':True, 'databack':'', 'code':'ok'})
+    return df
+
+
+def customerasset(username, customer):
+    df = customerreviewf(username, customer)
+    df = df[df['تعداد']>0]
+    if len(df)>0:
+        df['قیمت_بازار'] = [int(getLivePriceSymbol(x)) for x in df.index]
+        df['بازدهی'] = ((df['قیمت_بازار']/df['قیمت_خرید'])-1)*100
+        df['بازدهی'] = [str(round(x,2))+'%' for x in df['بازدهی']]
+    return df
 

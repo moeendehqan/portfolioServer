@@ -64,12 +64,20 @@ def portfoli_customerlist():
     username = data['username']
     return customerNames(username)
 
-@app.route('/portfoli/customerreview',methods = ['POST', 'GET'])
-def portfoli_customerreview():
+@app.route('/portfoli/asset',methods = ['POST', 'GET'])
+def portfoli_customerasset():
     data = request.get_json()
     username = data['username']
     customer = data['customer']
-    return customerreview(username, customer)
+    df = customerasset(username, customer)
+    df = df.reset_index()
+    if len(df)>0:
+        databack = df.to_dict(orient='records')
+        return json.dumps({'replay':True, 'databack':databack, 'msg':''})
+    else:
+        return json.dumps({'replay':False, 'databack':'', 'msg':'دارایی برای نمایش موجود نیست'})
+
+    
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)
