@@ -1,3 +1,4 @@
+from dataclasses import replace
 from flask import Flask, request
 import json
 from flask_cors import CORS
@@ -77,7 +78,33 @@ def portfoli_customerasset():
     else:
         return json.dumps({'replay':False, 'databack':'', 'msg':'دارایی برای نمایش موجود نیست'})
 
-    
+@app.route('/portfoli/profitability',methods = ['POST', 'GET'])
+def portfoli_customerprofitability():
+    data = request.get_json()
+    username = data['username']
+    customer = data['customer']
+    dateselect = data['dateselect']
+    problem = customerprofitability(username,customer,dateselect)
+    print(problem)
+    if problem[0]:
+        return json.dumps({'replay':False, 'msg':'nobuy', 'databack':problem[1]})
+    else:
+        return json.dumps({'replay':True, 'msg':'', "databack":''})
+
+@app.route('/portfoli/getallsymbol',methods = ['POST', 'GET'])
+def portfoli_getallsymbol():
+    databack = getAllSymboll()
+    return json.dumps({'databack':databack})
+
+@app.route('/portfoli/updateform',methods = ['POST', 'GET'])
+def portfoli_updateform():
+    data = request.get_json()
+    updateform(data)
+
+    return json.dumps({'ok':'ok'})
+
+
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)

@@ -1,4 +1,6 @@
+from cmath import nan
 import json
+from matplotlib.style import available
 import pandas as pd
 import pymongo
 from general import *
@@ -63,8 +65,11 @@ def customerNames(usename):
     return json.dumps({'replay':theresponse, 'msg':msg, 'databack':data})
 
 
-def customerreviewf(username, customer):
+def customerreviewf(username, customer,dateselect):
     df = pd.DataFrame(pd.DataFrame(portfolio[username+'_'+'trad'].find({'عنوان مشتری':customer})))
+    if dateselect!=0:
+        print(dateselect)
+        df = df[df['تاریخ معامله عددی']<=int(dateselect)]
     profileCustomer = {
         'شناسه ملی':str(df['شناسه ملی'][0]),
         'کد بورسی':str(df['کد بورسی'][0]),
@@ -90,11 +95,56 @@ def customerreviewf(username, customer):
 
 
 def customerasset(username, customer):
-    df = customerreviewf(username, customer)
+    df = customerreviewf(username, customer, 0)
     df = df[df['تعداد']>0]
     if len(df)>0:
         df['قیمت_بازار'] = [int(getLivePriceSymbol(x)) for x in df.index]
         df['بازدهی'] = ((df['قیمت_بازار']/df['قیمت_خرید'])-1)*100
         df['بازدهی'] = [str(round(x,2))+'%' for x in df['بازدهی']]
     return df
+
+
+def customerprofitability(username, customer,dataselect):
+    df = customerreviewf(username, customer,dataselect)
+    dffalse = df[df['تعداد']<0]
+    if len(dffalse)>0:
+        dffalse['تعداد'] = [int(x) for x in dffalse['تعداد']]
+        dffalse = dffalse['تعداد']
+        dffalse = dffalse.reset_index()
+        return [True,dffalse.to_dict(orient='records')]
+    else:
+        return [False, {}]
+
+def updateform(data):
+    username = data['username']
+    datenamber = data['date']
+    date = str(datenamber)
+    date = date[0:4]+'/'+date[4:6]+'/'+date[6:]
+    side = data['side']
+    customer = data['customer']
+    symbol = data['symbol']+'1'
+    amunt = data['amunt']
+    price = data['price']
+    otherdata = portfolio[username+'_trad'].find_one({'عنوان مشتری':customer})
+    code = otherdata['کد بورسی']
+    idnation = otherdata['شناسه ملی']
+    nameBranch = otherdata['نام شعبه مشتری']
+    value = int(amunt)*int(price)
+    gruopCustomer = otherdata['گروه مشتری']
+    portfolio[username+'_trad'].insert_one({
+        'تاریخ معامله':date,
+        'نوع معامله':side,
+        'کد بورسی':code,
+        'شناسه ملی':idnation,
+        'عنوان مشتری':customer,
+        'نام شعبه':'Manual',
+        'نام شعبه مشتری':nameBranch,
+        'نماد':symbol,
+        'نماد سپرده گذاری':symbol,
+        'تعداد':amunt,
+        'قیمت':price,
+        'ارزش معامله':value,
+        'گروه مشتری':gruopCustomer,
+        'تاریخ معامله عددی':datenamber
+    })
 
