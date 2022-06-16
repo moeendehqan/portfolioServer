@@ -59,11 +59,17 @@ def portfoli_update():
     username = request.form.get('username')
     return uploadTradFile(request.files['filetrade'],username)
 
-@app.route('/portfoli/customerlist',methods = ['POST', 'GET'])
-def portfoli_customerlist():
+@app.route('/portfoli/customerupdate',methods = ['POST', 'GET'])
+def portfoli_customerupdate():
     data = request.get_json()
     username = data['username']
-    return customerNames(username)
+    return json.dumps(customerNames(username))
+
+@app.route('/portfoli/customerreview',methods = ['POST', 'GET'])
+def portfoli_customerreview():
+    data = request.get_json()
+    username = data['username']
+    return json.dumps(customerreview(username))
 
 @app.route('/portfoli/asset',methods = ['POST', 'GET'])
 def portfoli_customerasset():

@@ -1,3 +1,4 @@
+from asyncio.windows_events import NULL
 from cmath import nan
 import json
 from matplotlib.style import available
@@ -50,20 +51,46 @@ def uploadTradFile(file,username):
 
 
 def customerNames(usename):
-    '''این تابع برای بازگردانندن نام مشتریان کاربر میباشد
-    username: نام کاربری که که درخواست نام مشتریان را کرده
-    '''
     customerNames = pd.DataFrame(portfolio[usename+'_'+'trad'].find())
     if len(customerNames)>0:
+        df = pd.DataFrame(portfolio[usename+'_'+'trad'].find())
+        df['تاریخ معامله عددی'] = [int(x) for x in df['تاریخ معامله عددی']]
         theresponse = True
         msg = ''
-        data = list(set(pd.DataFrame(portfolio[usename+'_'+'trad'].find())['عنوان مشتری']))
+        customerNames = list(set(df['عنوان مشتری']))
+        numTrade = len(df)
+        lastUpdate = str(df['تاریخ معامله عددی'].max())
+        lastUpdate = lastUpdate[0:4]+'/'+lastUpdate[4:6]+'/'+lastUpdate[6:8]
+        return {'replay':theresponse, 'msg':msg, 'databack':{'customerNames':customerNames, 'numTrade':numTrade, 'lastUpdate':lastUpdate}}
     else:
         theresponse = False
         msg = 'مشتری تعریف نشده'
         data = ''
-    return json.dumps({'replay':theresponse, 'msg':msg, 'databack':data})
+    return {'replay':theresponse, 'msg':msg, 'databack':data}
 
+def customerreview(usename):
+    customerNames = pd.DataFrame(portfolio[usename+'_'+'trad'].find())
+    if len(customerNames)>0:
+        replay = True
+        msg = ''
+        df = pd.DataFrame(portfolio[usename+'_'+'trad'].find())
+        df['nc'] = df['کد بورسی'] + ' - ' + df['عنوان مشتری'] 
+        df = df[['nc','نماد','تعداد','ارزش معامله']]
+        df = df.set_index('نماد').join(getPriceAllSymbol())
+        df = df.dropna()
+        
+        customerNames = list(set(df['nc']))
+        data = {
+            'customerNames':customerNames,
+        }
+        return n #{'replay':replay, 'msg':msg, 'databack':data}
+    else:
+        replay = False
+        msg = 'مشتری تعریف نشده'
+        data = ''
+    return {'replay':replay, 'msg':msg, 'databack':data}
+
+print(customerreview('test2'))
 
 def customerreviewf(username, customer,dateselect):
     df = pd.DataFrame(pd.DataFrame(portfolio[username+'_'+'trad'].find({'عنوان مشتری':customer})))
