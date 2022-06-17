@@ -1,4 +1,4 @@
-from dataclasses import replace
+import stocks
 from flask import Flask, request
 import json
 from flask_cors import CORS
@@ -52,6 +52,35 @@ def account():
         databack = {'portfoli':portfoli, 'eft':eft, 'stocks':stocks}
     dic = {'replay':replay, 'msg':msg, 'databack':databack}
     return json.dumps(dic)
+
+@app.route('/stocks/update',methods = ['POST', 'GET'])
+def stocks_update():
+    user = request.form['user']
+    Trade =  request.files['Trade']
+    Register =  request.files['Register']
+    symbol = stocks.getSymbolOfUsername(user)
+    if symbol==False:
+        return json.dumps({'repaly':False,'msg':'نماد یافت نشد'})
+    else:
+        return stocks.updateFile(symbol, Trade, Register)
+
+@app.route('/stocks/traders',methods = ['POST', 'GET'])
+def stocks_traders():
+    data = request.get_json()
+    return stocks.tradersData(data['username'], int(data['fromDate']), int(data['toDate']), data['side'])
+
+@app.route('/stocks/infocode',methods = ['POST', 'GET'])
+def stocks_infocode():
+    data = request.get_json()
+    stocks.infocode(data['username'], data['code'])
+    return json.dumps({'o':'o'})
+
+
+
+
+
+
+
 
 
 @app.route('/portfoli/update',methods = ['POST', 'GET'])

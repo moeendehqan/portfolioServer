@@ -90,7 +90,6 @@ def customerreview(usename):
         data = ''
     return {'replay':replay, 'msg':msg, 'databack':data}
 
-print(customerreview('test2'))
 
 def customerreviewf(username, customer,dateselect):
     df = pd.DataFrame(pd.DataFrame(portfolio[username+'_'+'trad'].find({'عنوان مشتری':customer})))
