@@ -6,7 +6,7 @@ import numpy as np
 from numpy import mean, sort
 
 client = pymongo.MongoClient()
-portfolio = client['farasahm']
+farasahm_db = client['farasahm']
 
 client = pymongo.MongoClient()
 
@@ -37,7 +37,7 @@ def CodeToName(code, symbol):
     return name
 
 def getSymbolOfUsername(userName):
-    symbol = portfolio['user'].find_one({'username':userName})
+    symbol = farasahm_db['user'].find_one({'username':userName})
     if len(symbol)>0:
         return symbol['stocksName']
     else:
@@ -56,6 +56,7 @@ def updateFile(symbol, Trade, Register):
         dfTrade = pd.read_csv(Trade, encoding='utf-16', sep='\t')
     else:
         return json.dumps({'res':False,'msg':'نوع فایل معاملات مجاز نیست'})
+
     if RegisterType == 'xlsx':
         dfRegister = pd.read_excel(Register)
     elif RegisterType == 'csv':
@@ -131,20 +132,44 @@ def tradersData(username, fromDate, toDatye, side):
         dffinall['name'] = dfside['name']
         dffinall['id'] = dfside['id']
         dffinall['code'] = dfside['code']
-        dffinall['w'] = (dffinall['volume']/dffinall['volume'].max())+0.05
+        dffinall['w'] = (dffinall['volume']/dffinall['volume'].max())+0.1
         dffinall['price'] = [round(x) for x in dffinall['price']]
         dffinall = dffinall.to_dict('records')
         return json.dumps({'replay':True, 'data':dffinall})
-
-
 
 def infocode(username, code):
     symbol = getSymbolOfUsername(username)
     symbol_db = client[f'{symbol}_db']
     cr = symbol_db['register'].find_one({'Account':code})
-    broker = pd.DataFrame(symbol_db['trade'].find({},{'Buy_brkr':1, 'Sel_brkr':1}))
-    broker = list(set(list(broker['Buy_brkr'])+list(broker['Sel_brkr'])))
-    info = str(cr['Fullname']) + ', با کد ملی ' + str(cr['NationalId']) + ', صادره از ' + str(cr['Ispl']) + ', متولد ' + str(cr['Birthday'])
+    broker = pd.DataFrame(symbol_db['trade'].find({'B_account':code}))
+    if len(broker)>0:
+        brokercode = list(set(list(broker['Buy_brkr'])))
+    else:
+        brokercode =[]
+    broker = pd.DataFrame(symbol_db['trade'].find({'S_account':code}))
+    if len(broker)>0:
+        brokercode = brokercode + list(set(list(broker['Sel_brkr'])))
+    info = str(cr['Fullname']).replace('،',' ')  + ' , با کد ملی ' + str(cr['NationalId']) + ' , صادره از ' + str(cr['Ispl']) + ' , متولد ' + str(int(cr['Birthday'])) + '\n' + 'ایستگاه های معاملاتی:' + '\n'
+    brokerName = list(set([farasahm_db['broker'].find_one({'TBKEY':' '+x})['TBNAME'] for x in brokercode]))
+    for i in brokerName:
+        info = info + i + ','
+    return json.dumps({'replay':True, 'msg':info})
 
-    print(broker)
 
+def historicode(username, code):
+    symbol = getSymbolOfUsername(username)
+    symbol_db = client[f'{symbol}_db']
+    alldatetrade = [symbol_db['trade'].find_one(sort=[("Date", pymongo.ASCENDING)])['Date'],
+                    symbol_db['trade'].find_one(sort=[("Date", pymongo.DESCENDING)])['Date']]
+    dfBalance = pd.DataFrame(symbol_db['balance'].find({'index':code})).drop(columns=['_id','Volume_B','Volume_S','index'])
+    alldatetrade = list(filter(lambda x : x >= dfBalance['date'].min() , alldatetrade))
+    alldatetrade = list(filter(lambda x : x <= dfBalance['date'].max() , alldatetrade))
+    for i in alldatetrade:
+        if i not in list(dfBalance['date']):
+            dfBalance.loc[dfBalance.index.max()+1]=[i,0]
+    dfBalance = dfBalance.sort_values(by='date').reset_index().drop(columns=['index'])
+    dfBalance['cum'] = dfBalance['Balance'].cumsum()
+    dfBalance['ww'] = dfBalance['cum']/(max([abs(x) for x in dfBalance['cum']]))
+    dfBalance = dfBalance.drop(columns=['Balance'])
+    dfBalance = dfBalance.to_dict(orient='records')
+    return json.dumps({'replay':True,'data':dfBalance})

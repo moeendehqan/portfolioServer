@@ -1,6 +1,6 @@
 import pandas as pd
 import requests
-
+import codecs
 
 def ClearDf(df,columns):
     dff = df
@@ -8,6 +8,40 @@ def ClearDf(df,columns):
         dff[c] = [float(str(x).replace(',','')) for x in dff[c]]
     return dff
 
+def xmlToDfTrade(p):
+    try:
+        l = []
+        f = codecs.open(p,'r','UTF-16')
+        for i in f:
+            row = i.replace('<item>','').replace('</item>','')
+            row = row.split('> <')
+            rowful = []
+            for r in row:
+                fild = r.split('>')[1].split('<')[0]
+                rowful.append(fild)
+            l.append(rowful)
+        df = pd.DataFrame(columns=['Symbol','Volume','Price','Buy_brkr','Sel_brkr','Ticket_no','Cancel','B_account','S_account','Date','Time'],data=l)
+    except:
+        df = pd.DataFrame(columns=['Symbol','Volume','Price','Buy_brkr','Sel_brkr','Ticket_no','Cancel','B_account','S_account','Date','Time'],data=[])
+    return df
+
+def xmlToDfRegister(p):
+    try:
+        l = []
+        f = codecs.open(p,'r','UTF-16')
+        for i in f:
+            row = i.replace('<item>','').replace('</item>','')
+            row = row.split('> <')
+            rowful = []
+            for r in row:
+                fild = r.split('>')[1].split('<')[0]
+                rowful.append(fild)
+            l.append(rowful)
+        df = pd.DataFrame(columns=['Account','Fullname','Ispl','Isno','Father','Type','NationalId','Birthday','Serial','Firstname','Lastname'],data=l)
+
+    except:
+        df = pd.DataFrame(columns=['Account','Fullname','Ispl','Isno','Father','Type','NationalId','Birthday','Serial','Firstname','Lastname'],data=[])
+    return df
 
 def getLivePriceSymbol(symbol):
     url = 'https://sourcearena.ir/api/'

@@ -72,11 +72,12 @@ def stocks_traders():
 @app.route('/stocks/infocode',methods = ['POST', 'GET'])
 def stocks_infocode():
     data = request.get_json()
-    stocks.infocode(data['username'], data['code'])
-    return json.dumps({'o':'o'})
+    return stocks.infocode(data['username'], data['code'])
 
-
-
+@app.route('/stocks/historicode',methods = ['POST', 'GET'])
+def stocks_historicode():
+    data = request.get_json()
+    return stocks.historicode(data['username'], data['code'])
 
 
 
@@ -135,7 +136,6 @@ def portfoli_getallsymbol():
 def portfoli_updateform():
     data = request.get_json()
     updateform(data)
-
     return json.dumps({'ok':'ok'})
 
 
