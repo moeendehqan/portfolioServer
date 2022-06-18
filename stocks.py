@@ -149,8 +149,15 @@ def infocode(username, code):
     broker = pd.DataFrame(symbol_db['trade'].find({'S_account':code}))
     if len(broker)>0:
         brokercode = brokercode + list(set(list(broker['Sel_brkr'])))
-    info = str(cr['Fullname']).replace('،',' ')  + ' , با کد ملی ' + str(cr['NationalId']) + ' , صادره از ' + str(cr['Ispl']) + ' , متولد ' + str(int(cr['Birthday'])) + '\n' + 'ایستگاه های معاملاتی:' + '\n'
-    brokerName = list(set([farasahm_db['broker'].find_one({'TBKEY':' '+x})['TBNAME'] for x in brokercode]))
+
+
+
+
+    try:info = str(cr['Fullname']).replace('،',' ')  + ' , با کد ملی ' + str(cr['NationalId']) + ' , صادره از ' + str(cr['Ispl']) + ' , متولد ' + str(int(cr['Birthday'])) + '\n' + 'ایستگاه های معاملاتی:' + '\n'
+    except:info = str(cr['Fullname']).replace('،',' ')  + ' , با کد ملی ' + str(cr['NationalId']) + ' , صادره از ' + str(cr['Ispl']) + '\n' + 'ایستگاه های معاملاتی:' + '\n'
+    print('-'*10)
+    print(brokercode)
+    brokerName = list(set([farasahm_db['broker'].find_one({'TBKEY':' '+(x.replace(' ',''))})['TBNAME'] for x in brokercode]))
     for i in brokerName:
         info = info + i + ','
     return json.dumps({'replay':True, 'msg':info})
@@ -169,7 +176,6 @@ def historicode(username, code):
             dfBalance.loc[dfBalance.index.max()+1]=[i,0]
     dfBalance = dfBalance.sort_values(by='date').reset_index().drop(columns=['index'])
     dfBalance['cum'] = dfBalance['Balance'].cumsum()
-    dfBalance['ww'] = dfBalance['cum']/(max([abs(x) for x in dfBalance['cum']]))
     dfBalance = dfBalance.drop(columns=['Balance'])
     dfBalance = dfBalance.to_dict(orient='records')
     return json.dumps({'replay':True,'data':dfBalance})
