@@ -79,6 +79,28 @@ def stocks_historicode():
     data = request.get_json()
     return stocks.historicode(data['username'], data['code'])
 
+@app.route('/stocks/newbie',methods = ['POST', 'GET'])
+def stocks_newbie():
+    data = request.get_json()
+    return stocks.newbie(data['username'], int(data['fromDate']), int(data['toDate']))
+
+@app.route('/stocks/station',methods = ['POST', 'GET'])
+def stocks_station():
+    data = request.get_json()
+    return stocks.station(data['username'], int(data['fromDate']), int(data['toDate']), data['side'])
+
+@app.route('/stocks/dashbord',methods = ['POST', 'GET'])
+def stocks_dashbord():
+    data = request.get_json()
+    return stocks.dashbord(data['username'])
+
+
+
+
+
+
+
+
 
 
 

@@ -43,6 +43,13 @@ def getSymbolOfUsername(userName):
     else:
         return False
 
+def getSymbolTseOfUsername(userName):
+    symbol = farasahm_db['user'].find_one({'username':userName})
+    if len(symbol)>0:
+        return symbol['stocksSymbol']
+    else:
+        return False
+
 def updateFile(symbol, Trade, Register):
     symbol_db = client[f'{symbol}_db']
     trade_collection = symbol_db['trade']
@@ -97,19 +104,19 @@ def updateFile(symbol, Trade, Register):
     balance_collection.insert_many(dfBalance.to_dict(orient='records'))
     return json.dumps({'res':True,'msg':'اطلاعات با موفقیت ثبت شد'})
 
-def tradersData(username, fromDate, toDatye, side):
+def tradersData(username, fromDate, toDate, side):
     symbol = getSymbolOfUsername(username)
     symbol_db = client[f'{symbol}_db']
     trade_collection = symbol_db['trade']
     if(fromDate==False):
         fromDate = trade_collection.find_one(sort=[("Date", -1)])['Date']
-    if(toDatye==False):
-        toDatye = trade_collection.find_one(sort=[("Date", 1)])['Date']
+    if(toDate==False):
+        toDate = trade_collection.find_one(sort=[("Date", 1)])['Date']
     if side=='buy':
         side = 'B_account'
     else:
         side = 'S_account'
-    dftrade = pd.DataFrame(trade_collection.find({ 'Date' : { '$gte' :  min(toDatye,fromDate), '$lte' : max(toDatye,fromDate)}}))
+    dftrade = pd.DataFrame(trade_collection.find({ 'Date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
     if len(dftrade)<=0:
         
         return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
@@ -149,10 +156,6 @@ def infocode(username, code):
     broker = pd.DataFrame(symbol_db['trade'].find({'S_account':code}))
     if len(broker)>0:
         brokercode = brokercode + list(set(list(broker['Sel_brkr'])))
-
-
-
-
     try:info = str(cr['Fullname']).replace('،',' ')  + ' , با کد ملی ' + str(cr['NationalId']) + ' , صادره از ' + str(cr['Ispl']) + ' , متولد ' + str(int(cr['Birthday'])) + '\n' + 'ایستگاه های معاملاتی:' + '\n'
     except:info = str(cr['Fullname']).replace('،',' ')  + ' , با کد ملی ' + str(cr['NationalId']) + ' , صادره از ' + str(cr['Ispl']) + '\n' + 'ایستگاه های معاملاتی:' + '\n'
     print('-'*10)
@@ -179,3 +182,81 @@ def historicode(username, code):
     dfBalance = dfBalance.drop(columns=['Balance'])
     dfBalance = dfBalance.to_dict(orient='records')
     return json.dumps({'replay':True,'data':dfBalance})
+
+def newbie(username, fromDate, toDate):
+    symbol = getSymbolOfUsername(username)
+    symbol_db = client[f'{symbol}_db']
+    if(fromDate==False):
+        fromDate = symbol_db['trade'].find_one(sort=[("Date", -1)])['Date']
+    if(toDate==False):
+        toDate = symbol_db['trade'].find_one(sort=[("Date", 1)])['Date']
+
+    dftrade = pd.DataFrame(symbol_db['trade'].find({ 'Date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
+    if len(dftrade)<=0:
+        return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
+    else:
+        alldate = list(set(dftrade['Date'].to_list()))
+        dfnewtrader = pd.DataFrame(columns=['Date','newvol','newnum','allvol','allnum'])
+        for i in alldate:
+            dfTraderp = dftrade[dftrade['Date']<i]
+            dfTraderl = dftrade[dftrade['Date']==i]
+            allgrp = dfTraderl.groupby(by=['B_account']).sum()
+            if len(dfTraderp)==0:
+                dfnewtrader = dfnewtrader.append({'Date':i, 'newvol':0, 'newnum':0, 'allvol':allgrp['Volume'].sum(), 'allnum':len(allgrp['Volume'])}, ignore_index=True)
+            else:
+                alloldcode = set(dfTraderp['B_account'])
+                dfTraderl['new'] = dfTraderl['B_account'].map( lambda x: 'old' if x in alloldcode else 'new')
+                dfTraderl = dfTraderl[dfTraderl['new']!='old']
+                newnew = dfTraderl.groupby(by=['B_account']).sum()
+                newvolume = newnew['Volume'].sum()
+                newnum = len(newnew['Volume'])
+                dfnewtrader = dfnewtrader.append({'Date':i, 'newvol':newvolume, 'newnum':newnum , 'allvol':allgrp['Volume'].sum(), 'allnum':len(allgrp['Volume'])}, ignore_index=True)
+        dfnewtrader = dfnewtrader.sort_values(by=['Date']).reset_index().drop(columns=['index'])
+        dfnewtrader = dfnewtrader[dfnewtrader.index<30]
+        dfnewtrader = dfnewtrader.to_dict(orient='recodes')
+        return json.dumps({'replay':True,'data':dfnewtrader})
+
+
+
+def station(username, fromDate, toDate, side):
+    symbol = getSymbolOfUsername(username)
+    symbol_db = client[f'{symbol}_db']
+    if(fromDate==False):
+        fromDate = symbol_db['trade'].find_one(sort=[("Date", -1)])['Date']
+    if(toDate==False):
+        toDate = symbol_db['trade'].find_one(sort=[("Date", 1)])['Date']
+    dfTrader = pd.DataFrame(symbol_db['trade'].find({ 'Date' : { '$gte' :toDate  , '$lte' :fromDate }}))
+    print(dfTrader)
+    if len(dfTrader)==0:
+        return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
+    else:
+        dfTrader['count'] =  1
+        dfistgah = dfTrader.groupby(by=side).sum()
+        dfistgah = dfistgah.sort_values(by='Volume',ascending=False)
+        dfistgah = dfistgah[['Volume','count']].reset_index()
+        dfistgah.columns = ['Istgah','Volume','count']
+        dfistgah = dfistgah[dfistgah.index>20]
+        for i in dfistgah.index:
+            key = dfistgah['Istgah'][i]
+
+            #dfistgah['Istgah'][i] = farasahm_db['broker'].find_one({'TBKEY':' '+(i.replace(' ',''))})['TBNAME']
+            try:dfistgah['Istgah'][i] = farasahm_db['broker'].find_one({'TBKEY':' '+(key.replace(' ',''))})['TBNAME']
+            except:dfistgah['Istgah'][i] = 'نامعلوم'
+        dfistgah = dfistgah.to_dict(orient='recodes')
+        return json.dumps({'replay':True,'data':dfistgah})
+
+def dashbord(username):
+    symbol = getSymbolOfUsername(username)
+    symbol_db = client[f'{symbol}_db']
+    dftrade = pd.DataFrame(symbol_db['trade'].find())[['Date','Volume','Price']]
+    dftrade['Value'] = dftrade['Volume'] * dftrade['Price']
+    dftrade = dftrade.groupby(by='Date').sum()
+    dftrade['Price'] = dftrade['Value'] / dftrade['Volume']
+    dftrade = dftrade.sort_index(ascending=False).reset_index()
+    dftrade = dftrade[dftrade.index<30]
+    
+    lastUpdate = dftrade['Date'].max()
+    print(dftrade)
+    publicDataTse = requests.get(url=f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={getSymbolTseOfUsername(username)}').json()
+
+    return json.dumps({'o':'o','lastUpdate':int(lastUpdate)})
