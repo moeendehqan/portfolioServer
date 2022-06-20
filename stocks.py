@@ -165,8 +165,6 @@ def infocode(username, code):
         brokercode = brokercode + list(set(list(broker['Sel_brkr'])))
     try:info = str(cr['Fullname']).replace('،',' ')  + ' , با کد ملی ' + str(cr['NationalId']) + ' , صادره از ' + str(cr['Ispl']) + ' , متولد ' + str(int(cr['Birthday'])) + '\n' + 'ایستگاه های معاملاتی:' + '\n'
     except:info = str(cr['Fullname']).replace('،',' ')  + ' , با کد ملی ' + str(cr['NationalId']) + ' , صادره از ' + str(cr['Ispl']) + '\n' + 'ایستگاه های معاملاتی:' + '\n'
-    print('-'*10)
-    print(brokercode)
     brokerName = list(set([farasahm_db['broker'].find_one({'TBKEY':' '+(x.replace(' ',''))})['TBNAME'] for x in brokercode]))
     for i in brokerName:
         info = info + i + ','
@@ -176,11 +174,13 @@ def infocode(username, code):
 def historicode(username, code):
     symbol = getSymbolOfUsername(username)
     symbol_db = client[f'{symbol}_db']
-    alldatetrade = [symbol_db['trade'].find_one(sort=[("Date", pymongo.ASCENDING)])['Date'],
-                    symbol_db['trade'].find_one(sort=[("Date", pymongo.DESCENDING)])['Date']]
+    alldatetrade = list(set(pd.DataFrame(symbol_db['trade'].find())['Date']))
+    print('-'*10)
+    print(alldatetrade)
     dfBalance = pd.DataFrame(symbol_db['balance'].find({'index':code})).drop(columns=['_id','Volume_B','Volume_S','index'])
     alldatetrade = list(filter(lambda x : x >= dfBalance['date'].min() , alldatetrade))
     alldatetrade = list(filter(lambda x : x <= dfBalance['date'].max() , alldatetrade))
+
     for i in alldatetrade:
         if i not in list(dfBalance['date']):
             dfBalance.loc[dfBalance.index.max()+1]=[i,0]
