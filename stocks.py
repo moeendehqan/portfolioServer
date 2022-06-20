@@ -117,6 +117,8 @@ def tradersData(username, fromDate, toDate, side, sorting):
     else:
         side = 'S_account'
     dftrade = pd.DataFrame(trade_collection.find({ 'Date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
+    dfbalance = pd.DataFrame(symbol_db['balance'].find({ 'date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
+    dfbalance = dfbalance[dfbalance['date']==dfbalance['date'].max()]
     if len(dftrade)<=0:
         
         return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
@@ -133,9 +135,9 @@ def tradersData(username, fromDate, toDate, side, sorting):
         elif sorting == 'avol':
             dfside = dfside.sort_values(by=['Volume'],ascending=True)
         elif sorting == 'aprc':
-            dfside = dfside.sort_values(by=['price'],ascending=True)
+            dfside = dfside.sort_values(by=['Price'],ascending=True)
         elif sorting == 'zprc':
-            dfside = dfside.sort_values(by=['price'],ascending=False)
+            dfside = dfside.sort_values(by=['Price'],ascending=False)
         dfside = dfside.reset_index()
         dfside = dfside.reset_index()
         dfside.columns = ['id','name','volume','value','price','code']
@@ -148,6 +150,8 @@ def tradersData(username, fromDate, toDate, side, sorting):
         dffinall['code'] = dfside['code']
         dffinall['w'] = (dffinall['volume']/dffinall['volume'].max())+0.1
         dffinall['price'] = [round(x) for x in dffinall['price']]
+        dffinall['balance'] = [dfbalance[dfbalance['index']==x]['Balance'].values[0] for x in dffinall['code']]
+
         dffinall = dffinall.to_dict('records')
         return json.dumps({'replay':True, 'data':dffinall})
 
@@ -231,7 +235,6 @@ def station(username, fromDate, toDate, side):
     if(toDate==False):
         toDate = symbol_db['trade'].find_one(sort=[("Date", 1)])['Date']
     dfTrader = pd.DataFrame(symbol_db['trade'].find({ 'Date' : { '$gte' :toDate  , '$lte' :fromDate }}))
-    print(dfTrader)
     if len(dfTrader)==0:
         return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
     else:
@@ -240,30 +243,23 @@ def station(username, fromDate, toDate, side):
         dfistgah = dfistgah.sort_values(by='Volume',ascending=False)
         dfistgah = dfistgah[['Volume','count']].reset_index()
         dfistgah.columns = ['Istgah','Volume','count']
-        dfistgah = dfistgah[dfistgah.index>20]
+        dfistgah['w'] = (dfistgah['Volume'] / dfistgah['Volume'].max()) + 0.1
         for i in dfistgah.index:
             key = dfistgah['Istgah'][i]
 
             #dfistgah['Istgah'][i] = farasahm_db['broker'].find_one({'TBKEY':' '+(i.replace(' ',''))})['TBNAME']
             try:dfistgah['Istgah'][i] = farasahm_db['broker'].find_one({'TBKEY':' '+(key.replace(' ',''))})['TBNAME']
             except:dfistgah['Istgah'][i] = 'نامعلوم'
+        print(dfistgah)
         dfistgah = dfistgah.to_dict(orient='recodes')
         return json.dumps({'replay':True,'data':dfistgah})
 
 def dashbord(username):
-    symbol = getSymbolOfUsername(username)
-    symbol_db = client[f'{symbol}_db']
-    dftrade = pd.DataFrame(symbol_db['trade'].find())[['Date','Volume','Price']]
-    dftrade['Value'] = dftrade['Volume'] * dftrade['Price']
-    dftrade = dftrade.groupby(by='Date').sum()
-    dftrade['Price'] = dftrade['Value'] / dftrade['Volume']
-    dftrade = dftrade.sort_index(ascending=False).reset_index()
-    dftrade = dftrade[dftrade.index<30]
-    
-    lastUpdate = dftrade['Date'].max()
-    publicDataTse = requests.get(url=f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={getSymbolTseOfUsername(username)}').json()
+    codal = requests.get(url=f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&codal={getSymbolTseOfUsername(username)}&p=1').json()
+    if len(codal)>5:
+        codal = codal[:5]
 
-    return json.dumps({'o':'o','lastUpdate':int(lastUpdate)})
+    return json.dumps({'replay':True,'codal':codal})
 
 def dataupdate(username):
     try:
