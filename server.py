@@ -63,11 +63,16 @@ def stocks_update():
         return json.dumps({'repaly':False,'msg':'نماد یافت نشد'})
     else:
         return stocks.updateFile(symbol, Trade, Register)
+@app.route('/stocks/dataupdate',methods = ['POST', 'GET'])
+def stocks_dataupdate():
+    data = request.get_json()
+    return stocks.dataupdate(data['username'])
+
 
 @app.route('/stocks/traders',methods = ['POST', 'GET'])
 def stocks_traders():
     data = request.get_json()
-    return stocks.tradersData(data['username'], int(data['fromDate']), int(data['toDate']), data['side'])
+    return stocks.tradersData(data['username'], int(data['fromDate']), int(data['toDate']), data['side'], data['sorting'])
 
 @app.route('/stocks/infocode',methods = ['POST', 'GET'])
 def stocks_infocode():

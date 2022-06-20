@@ -104,14 +104,14 @@ def updateFile(symbol, Trade, Register):
     balance_collection.insert_many(dfBalance.to_dict(orient='records'))
     return json.dumps({'res':True,'msg':'اطلاعات با موفقیت ثبت شد'})
 
-def tradersData(username, fromDate, toDate, side):
+def tradersData(username, fromDate, toDate, side, sorting):
     symbol = getSymbolOfUsername(username)
     symbol_db = client[f'{symbol}_db']
     trade_collection = symbol_db['trade']
     if(fromDate==False):
         fromDate = trade_collection.find_one(sort=[("Date", -1)])['Date']
     if(toDate==False):
-        toDate = trade_collection.find_one(sort=[("Date", 1)])['Date']
+        toDate = trade_collection.find_one(sort=[("Date", -1)])['Date']
     if side=='buy':
         side = 'B_account'
     else:
@@ -128,7 +128,14 @@ def tradersData(username, fromDate, toDate, side):
         dfside['Price'] = dfside['Value']/dfside['Volume']
         dfside['code'] = dfside.index
         dfside.index = [CodeToName(x,symbol) for x in dfside.index]
-        dfside = dfside.sort_values(by=['Volume'],ascending=False)
+        if sorting == 'zvol':
+            dfside = dfside.sort_values(by=['Volume'],ascending=False)
+        elif sorting == 'avol':
+            dfside = dfside.sort_values(by=['Volume'],ascending=True)
+        elif sorting == 'aprc':
+            dfside = dfside.sort_values(by=['price'],ascending=True)
+        elif sorting == 'zprc':
+            dfside = dfside.sort_values(by=['price'],ascending=False)
         dfside = dfside.reset_index()
         dfside = dfside.reset_index()
         dfside.columns = ['id','name','volume','value','price','code']
@@ -216,8 +223,6 @@ def newbie(username, fromDate, toDate):
         dfnewtrader = dfnewtrader.to_dict(orient='recodes')
         return json.dumps({'replay':True,'data':dfnewtrader})
 
-
-
 def station(username, fromDate, toDate, side):
     symbol = getSymbolOfUsername(username)
     symbol_db = client[f'{symbol}_db']
@@ -256,7 +261,20 @@ def dashbord(username):
     dftrade = dftrade[dftrade.index<30]
     
     lastUpdate = dftrade['Date'].max()
-    print(dftrade)
     publicDataTse = requests.get(url=f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={getSymbolTseOfUsername(username)}').json()
 
     return json.dumps({'o':'o','lastUpdate':int(lastUpdate)})
+
+def dataupdate(username):
+    try:
+        symbol = getSymbolOfUsername(username)
+        symbol_db = client[f'{symbol}_db']
+        dft = pd.DataFrame(symbol_db['trade'].find())
+        lastUpdate = str(dft['Date'].max())
+        lastUpdate = lastUpdate[0:4]+'/'+lastUpdate[4:6]+'/'+lastUpdate[6:8]
+        cuntUpdate = int(len(set(dft['Date'])))
+        cuntTrade = len(dft)
+        cuntTrader = len(set(list(set(dft['B_account']))+list(set(dft['S_account']))))
+        data = {'lastUpdate':lastUpdate, 'cuntUpdate':cuntUpdate,'cuntTrade':cuntTrade, 'cuntTrader':cuntTrader }
+        return json.dumps({'replay':True, 'data':data})
+    except: return json.dumps({'replay':False})
