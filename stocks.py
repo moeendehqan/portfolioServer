@@ -4,7 +4,7 @@ import pymongo
 from general import *
 import numpy as np
 from numpy import mean, sort
-
+import collections 
 client = pymongo.MongoClient()
 farasahm_db = client['farasahm']
 
@@ -19,10 +19,7 @@ def is_register_file(df):
 
 def is_trade_file(df):
     standard_culomns = ['Symbol','Date','Time','Volume','Price','Buy_brkr','Sel_brkr','Ticket_no','Cancel','B_account','S_account']
-    cheack_culomns = (df.columns == standard_culomns)
-    cheack_culomns = [x*1 for x in cheack_culomns]
-    cheack_culomns = mean(cheack_culomns)==1
-    return cheack_culomns
+    return collections.Counter(list(df.columns)) == collections.Counter(standard_culomns)
     
 def CodeToName(code, symbol):
     symbol_db = client[f'{symbol}_db']
@@ -71,9 +68,11 @@ def updateFile(symbol, Trade, Register):
     else:
         return json.dumps({'res':False,'msg':'نوع فایل رجیستر مجاز نیست'})
     if is_trade_file(dfTrade)==False:
-        if symbol not in dfTrade['Symbol']:
-            if dfTrade['Date'].max() != dfTrade['Date'].min():
-                return json.dumps({'res':False,'msg':'محتویات فایل معاملات صحیح نیست'})
+        return json.dumps({'res':False,'msg':'محتویات فایل معاملات صحیح نیست'})
+    if symbol != dfTrade['Symbol'][1]:
+        return json.dumps({'res':False,'msg':'محتویات فایل معاملات صحیح نیست'})
+    if dfTrade['Date'].max() != dfTrade['Date'].min():
+        return json.dumps({'res':False,'msg':'محتویات فایل معاملات صحیح نیست'})
     if is_register_file(dfRegister)==False:
         return json.dumps({'res':False,'msg':'محتویات فایل رجیستر صحیح نیست'})
     cl_trade = pd.DataFrame(trade_collection.find({'Date':int(dfTrade['Date'].max())}))
@@ -118,7 +117,8 @@ def tradersData(username, fromDate, toDate, side, sorting):
         side = 'S_account'
     dftrade = pd.DataFrame(trade_collection.find({ 'Date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
     dfbalance = pd.DataFrame(symbol_db['balance'].find({ 'date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
-    dfbalance = dfbalance[dfbalance['date']==dfbalance['date'].max()]
+
+    
     if len(dftrade)<=0:
         
         return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
@@ -150,7 +150,11 @@ def tradersData(username, fromDate, toDate, side, sorting):
         dffinall['code'] = dfside['code']
         dffinall['w'] = (dffinall['volume']/dffinall['volume'].max())+0.1
         dffinall['price'] = [round(x) for x in dffinall['price']]
-        dffinall['balance'] = [dfbalance[dfbalance['index']==x]['Balance'].values[0] for x in dffinall['code']]
+        dffinall['balance'] = '-'
+        for i in dffinall.index:
+            balance = dfbalance[dfbalance['index']==dffinall['code'][i]]
+            balance = balance[balance['date']==balance['date'].max()]['Balance'].values[0]
+            dffinall['balance'][i] = balance
 
         dffinall = dffinall.to_dict('records')
         return json.dumps({'replay':True, 'data':dffinall})
@@ -223,7 +227,7 @@ def newbie(username, fromDate, toDate):
                 newnum = len(newnew['Volume'])
                 dfnewtrader = dfnewtrader.append({'Date':i, 'newvol':newvolume, 'newnum':newnum , 'allvol':allgrp['Volume'].sum(), 'allnum':len(allgrp['Volume'])}, ignore_index=True)
         dfnewtrader = dfnewtrader.sort_values(by=['Date']).reset_index().drop(columns=['index'])
-        dfnewtrader = dfnewtrader[dfnewtrader.index<30]
+        #dfnewtrader = dfnewtrader[dfnewtrader.index<30]
         dfnewtrader = dfnewtrader.to_dict(orient='recodes')
         return json.dumps({'replay':True,'data':dfnewtrader})
 
@@ -255,11 +259,8 @@ def station(username, fromDate, toDate, side):
         return json.dumps({'replay':True,'data':dfistgah})
 
 def dashbord(username):
-    codal = requests.get(url=f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&codal={getSymbolTseOfUsername(username)}&p=1').json()
-    if len(codal)>5:
-        codal = codal[:5]
-
-    return json.dumps({'replay':True,'codal':codal})
+    power = requests.get(url=f'http://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&power={getSymbolTseOfUsername(username)}&days=30').json()
+    return json.dumps({'replay':True,'power':power})
 
 def dataupdate(username):
     try:
