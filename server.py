@@ -99,7 +99,10 @@ def stocks_dashbord():
     data = request.get_json()
     return stocks.dashbord(data['username'])
 
-
+@app.route('/stocks/sediment',methods = ['POST', 'GET'])
+def stocks_sediment():
+    data = request.get_json()
+    return stocks.sediment(data['username'],data['period'])
 
 
 

@@ -275,3 +275,39 @@ def dataupdate(username):
         data = {'lastUpdate':lastUpdate, 'cuntUpdate':cuntUpdate,'cuntTrade':cuntTrade, 'cuntTrader':cuntTrader }
         return json.dumps({'replay':True, 'data':data})
     except: return json.dumps({'replay':False})
+
+
+def sediment(username,period):
+    symbol = getSymbolOfUsername(username)
+    symbol_db = client[f'{symbol}_db']
+    dftrade = pd.DataFrame(symbol_db['trade'].find())
+    maxDate = dftrade['Date'].max()
+    day = int(str(maxDate)[6:8])
+    mon = int(str(maxDate)[4:6])-period
+    year =int(str(maxDate)[0:4])
+    if mon<=0:
+        onPriod = int(str(year-1)+str(mon+12)+str(day))
+    else:
+        onPriod = int(str(year)+str(mon)+str(day))
+    
+    outTrader = list(set(dftrade[dftrade['Date']>onPriod]['S_account']))
+    keepTrader = dftrade[dftrade['Date']<=onPriod]
+    keepTrader['out'] = keepTrader['S_account'].isin(outTrader)
+    keepTrader = keepTrader[keepTrader['out']==False]
+    keepTrader['Value'] = keepTrader['Price'] * keepTrader['Volume']
+    keepTrader['ValueDate'] = keepTrader['Volume'] * keepTrader['Date']
+    keepTrader = keepTrader.groupby(by='B_account').sum()
+    keepTrader['Price'] = keepTrader['Value'] / keepTrader['Volume']
+    keepTrader['Date'] = keepTrader['ValueDate']/keepTrader['Volume']
+    keepTrader = keepTrader.reset_index()
+    keepTrader = keepTrader[['B_account','Volume']]
+    keepTrader['Date'] = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in keepTrader['Date']]
+    keepTrader['Price'] =[int(x) for x in keepTrader['Price']]
+    keepTrader = keepTrader.to_dict(orient='records')
+
+
+    print(keepTrader)
+
+    data = ([outTrader])
+    return json.dumps({'data':keepTrader})
+
