@@ -105,6 +105,10 @@ def stocks_sediment():
     data = request.get_json()
     return stocks.sediment(data['username'], data['period'])
 
+@app.route('/stocks/traderlist',methods = ['POST', 'GET'])
+def stocks_traderlist():
+    data = request.get_json()
+    return stocks.traderlist(data['username'])
 
 
 

@@ -306,3 +306,11 @@ def sediment(username,period):
         dftrade = dftrade.sort_values(by='w',ascending=False)
         dftrade = dftrade.to_dict(orient='records')
         return json.dumps({'replay':True,'countSediment':countSediment,'sumSediment':sumSediment, 'data':dftrade})
+
+def traderlist(username):
+    symbol = getSymbolOfUsername(username)
+    symbol_db = client[f'{symbol}_db']
+    dftrader = pd.DataFrame(symbol_db['register'].find())
+    dftrader = dftrader[['Fullname','Account']]
+    dftrader = dftrader.to_dict(orient='records')
+    return json.dumps({'replay':True, 'data':dftrader})
