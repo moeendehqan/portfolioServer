@@ -29,6 +29,7 @@ def login():
     else:
         if user['password'] == data['password']:
             replay = True
+            databack = user['fullName']
         else:
             replay = False
             msg = 'رمزعبور اشتباه است'
@@ -102,7 +103,7 @@ def stocks_dashbord():
 @app.route('/stocks/sediment',methods = ['POST', 'GET'])
 def stocks_sediment():
     data = request.get_json()
-    return stocks.sediment(data['username'],data['period'])
+    return stocks.sediment(data['username'], data['period'])
 
 
 

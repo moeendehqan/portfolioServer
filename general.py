@@ -64,3 +64,18 @@ def getPriceAllSymbol():
     df['name'] = df['name']+'1'
     df = df.set_index('name')
     return df
+
+
+def onPeriodDate(Date,period):
+    onPriod = [int(str(Date)[0:4]), int(str(Date)[4:6])-period, int(str(Date)[6:8])]
+    if onPriod[1]<=0:
+        onPriod[0] = onPriod[0]-1
+        onPriod[1] = onPriod[1]+12
+
+    if onPriod[1]<10:
+        onPriod[1] = '0'+str(onPriod[1])
+    if onPriod[2]<10:
+        onPriod[2] = '0'+str(onPriod[2])
+    onPriod = int(str(onPriod[0])+str(onPriod[1])+str(onPriod[2]))
+    return onPriod
+

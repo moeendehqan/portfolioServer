@@ -1,3 +1,4 @@
+from dataclasses import replace
 import json
 import pandas as pd
 import pymongo
@@ -69,7 +70,7 @@ def updateFile(symbol, Trade, Register):
         return json.dumps({'res':False,'msg':'نوع فایل رجیستر مجاز نیست'})
     if is_trade_file(dfTrade)==False:
         return json.dumps({'res':False,'msg':'محتویات فایل معاملات صحیح نیست'})
-    if symbol != dfTrade['Symbol'][1]:
+    if symbol != dfTrade['Symbol'][dfTrade.index.min()]:
         return json.dumps({'res':False,'msg':'محتویات فایل معاملات صحیح نیست'})
     if dfTrade['Date'].max() != dfTrade['Date'].min():
         return json.dumps({'res':False,'msg':'محتویات فایل معاملات صحیح نیست'})
@@ -282,32 +283,26 @@ def sediment(username,period):
     symbol_db = client[f'{symbol}_db']
     dftrade = pd.DataFrame(symbol_db['trade'].find())
     maxDate = dftrade['Date'].max()
-    day = int(str(maxDate)[6:8])
-    mon = int(str(maxDate)[4:6])-period
-    year =int(str(maxDate)[0:4])
-    if mon<=0:
-        onPriod = int(str(year-1)+str(mon+12)+str(day))
-    else:
-        onPriod = int(str(year)+str(mon)+str(day))
-    
+    onPriod = onPeriodDate(maxDate,int(period))
     outTrader = list(set(dftrade[dftrade['Date']>onPriod]['S_account']))
-    keepTrader = dftrade[dftrade['Date']<=onPriod]
-    keepTrader['out'] = keepTrader['S_account'].isin(outTrader)
-    keepTrader = keepTrader[keepTrader['out']==False]
-    keepTrader['Value'] = keepTrader['Price'] * keepTrader['Volume']
-    keepTrader['ValueDate'] = keepTrader['Volume'] * keepTrader['Date']
-    keepTrader = keepTrader.groupby(by='B_account').sum()
-    keepTrader['Price'] = keepTrader['Value'] / keepTrader['Volume']
-    keepTrader['Date'] = keepTrader['ValueDate']/keepTrader['Volume']
-    keepTrader = keepTrader.reset_index()
-    keepTrader = keepTrader[['B_account','Volume']]
-    keepTrader['Date'] = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in keepTrader['Date']]
-    keepTrader['Price'] =[int(x) for x in keepTrader['Price']]
-    keepTrader = keepTrader.to_dict(orient='records')
-
-
-    print(keepTrader)
-
-    data = ([outTrader])
-    return json.dumps({'data':keepTrader})
-
+    DfOnPriod = dftrade[dftrade['Date']<=onPriod]
+    if len(DfOnPriod)<=0:
+        return json.dumps({'replay':False, 'msg':'اطلاعاتی موجود نیست'})
+    else:
+        DfOnPriod['out'] = DfOnPriod['B_account'].isin(outTrader)
+        DfOnPriod = DfOnPriod[DfOnPriod['out']==False]
+        DfOnPriodBuy = DfOnPriod.groupby(by='B_account').sum()[['Volume']]
+        DfOnPriodsel = DfOnPriod
+        DfOnPriodsel['buyer'] = DfOnPriod['S_account'].isin(list(DfOnPriodBuy.index))
+        DfOnPriodsel = DfOnPriodsel[DfOnPriodsel['buyer']==True]
+        DfOnPriodsel = DfOnPriodsel.groupby(by='S_account').sum()[['Volume']]
+        dftrade = DfOnPriodBuy.join(DfOnPriodsel, lsuffix='_buy', rsuffix='_sel')
+        dftrade['balance'] = dftrade['Volume_buy'] - dftrade['Volume_sel']
+        dftrade = dftrade[dftrade['balance']>0][['balance']].reset_index()
+        sumSediment =  dftrade['balance'].sum()
+        countSediment = len(dftrade)
+        dftrade['B_account'] = [CodeToName(x, symbol) for x in dftrade['B_account']]
+        dftrade['w'] = (dftrade['balance']/dftrade['balance'].max())+0.1
+        dftrade = dftrade.sort_values(by='w',ascending=False)
+        dftrade = dftrade.to_dict(orient='records')
+        return json.dumps({'replay':True,'countSediment':countSediment,'sumSediment':sumSediment, 'data':dftrade})
