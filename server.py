@@ -110,7 +110,10 @@ def stocks_traderlist():
     data = request.get_json()
     return stocks.traderlist(data['username'])
 
-
+@app.route('/stocks/detailes',methods = ['POST', 'GET'])
+def stocks_detailes():
+    data = request.get_json()
+    return stocks.detailes(data['username'], data['account'], data['fromDate'], data['toDate'])
 
 
 

@@ -29,6 +29,7 @@ def CodeToName(code, symbol):
     if len(name)>0:
         name = name['Fullname'][name.index.max()]
     else:
+        print('*'*5)
         name = code
     name = name.replace('(سهامی‌خاص)','')
 
@@ -312,5 +313,22 @@ def traderlist(username):
     symbol_db = client[f'{symbol}_db']
     dftrader = pd.DataFrame(symbol_db['register'].find())
     dftrader = dftrader[['Fullname','Account']]
+    dftrader = dftrader.to_dict(orient='records')
+    return json.dumps({'replay':True, 'data':dftrader})
+
+def detailes(username, account, fromDate, toDate):
+    symbol = getSymbolOfUsername(username)
+    symbol_db = client[f'{symbol}_db']
+    dftrader = pd.DataFrame(symbol_db['trade'].find({'B_account':account}))
+    dftrader = dftrader.append(pd.DataFrame(symbol_db['trade'].find({'S_account':account})))
+    if fromDate!=False:
+        dftrader = dftrader[dftrader['Date']>=int(fromDate)]
+    if toDate!=False:
+        dftrader = dftrader[dftrader['Date']<=int(toDate)]
+    dftrader = dftrader[['Volume','Price','B_account','S_account','Date','Time']]
+    dftrader = dftrader.sort_values(by=['Date','Time'], ascending=[True,True])
+    dftrader['B_account'] = [CodeToName(x, symbol) for x in dftrader['B_account']]
+    dftrader['S_account'] = [CodeToName(x, symbol) for x in dftrader['S_account']]
+    dftrader['Date'] = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in dftrader['Date']]
     dftrader = dftrader.to_dict(orient='records')
     return json.dumps({'replay':True, 'data':dftrader})
