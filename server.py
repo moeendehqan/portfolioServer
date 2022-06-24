@@ -100,6 +100,11 @@ def stocks_dashbord():
     data = request.get_json()
     return stocks.dashbord(data['username'])
 
+@app.route('/stocks/tablo',methods = ['POST', 'GET'])
+def stocks_tablo():
+    data = request.get_json()
+    return stocks.tablo(data['username'],data['date'])
+
 @app.route('/stocks/sediment',methods = ['POST', 'GET'])
 def stocks_sediment():
     data = request.get_json()
@@ -115,6 +120,10 @@ def stocks_detailes():
     data = request.get_json()
     return stocks.detailes(data['username'], data['account'], data['fromDate'], data['toDate'])
 
+@app.route('/stocks/detailesgetcsv',methods = ['POST', 'GET'])
+def stocks_detailesGetCsv():
+    data = request.get_json()
+    return stocks.detailesGetCsv(data['username'], data['account'], data['fromDate'], data['toDate'])
 
 
 

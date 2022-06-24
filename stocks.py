@@ -6,6 +6,9 @@ from general import *
 import numpy as np
 from numpy import mean, sort
 import collections 
+from flask  import make_response, send_file
+from openpyxl.writer.excel import save_virtual_workbook
+
 client = pymongo.MongoClient()
 farasahm_db = client['farasahm']
 
@@ -229,7 +232,6 @@ def newbie(username, fromDate, toDate):
                 newnum = len(newnew['Volume'])
                 dfnewtrader = dfnewtrader.append({'Date':i, 'newvol':newvolume, 'newnum':newnum , 'allvol':allgrp['Volume'].sum(), 'allnum':len(allgrp['Volume'])}, ignore_index=True)
         dfnewtrader = dfnewtrader.sort_values(by=['Date']).reset_index().drop(columns=['index'])
-        #dfnewtrader = dfnewtrader[dfnewtrader.index<30]
         dfnewtrader = dfnewtrader.to_dict(orient='recodes')
         return json.dumps({'replay':True,'data':dfnewtrader})
 
@@ -257,12 +259,32 @@ def station(username, fromDate, toDate, side):
             try:dfistgah['Istgah'][i] = farasahm_db['broker'].find_one({'TBKEY':' '+(key.replace(' ',''))})['TBNAME']
             except:dfistgah['Istgah'][i] = 'نامعلوم'
         print(dfistgah)
-        dfistgah = dfistgah.to_dict(orient='recodes')
+        dfistgah = dfistgah.to_dict(orient='records')
         return json.dumps({'replay':True,'data':dfistgah})
 
 def dashbord(username):
-    power = requests.get(url=f'http://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&power={getSymbolTseOfUsername(username)}&days=30').json()
-    return json.dumps({'replay':True,'power':power})
+    symbol = getSymbolOfUsername(username)
+    symbol_db = client[f'{symbol}_db']
+    lastUpdate = symbol_db['trade'].find_one(sort=[("Date", -1)])['Date']
+    topBuy = pd.DataFrame(symbol_db['balance'].find({'date':lastUpdate},sort=[("Balance", -1)]).limit(10))[['index','Balance']]
+    topBuy.index = [CodeToName(x,symbol) for x in topBuy['index']]
+    topBuy = topBuy.drop(columns='index')
+    topBuy = topBuy.to_dict(orient='dict')
+    topSel = pd.DataFrame(symbol_db['balance'].find({'date':lastUpdate},sort=[("Balance", 1)]).limit(10))[['index','Balance']]
+    topSel.index = [CodeToName(x,symbol) for x in topSel['index']]
+    topSel = topSel.drop(columns='index')
+    topSel['Balance'] =topSel['Balance']*-1
+    topSel = topSel.to_dict(orient='dict')
+    return json.dumps({'replay':True,'lastUpdate':lastUpdate,'topBuy':topBuy,'topSel':topSel})
+
+def tablo(username,date):
+    dateStr = str(date)[0:4]+'/'+str(date)[4:6]+'/'+str(date)[6:8]
+    req = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={getSymbolTseOfUsername(username)}&time={dateStr}'
+    print(req)
+    tabloRequest = requests.get(url=req).json()
+    print(tabloRequest)
+    return json.dumps(tabloRequest)
+
 
 def dataupdate(username):
     try:
@@ -285,28 +307,28 @@ def sediment(username,period):
     dftrade = pd.DataFrame(symbol_db['trade'].find())
     maxDate = dftrade['Date'].max()
     onPriod = onPeriodDate(maxDate,int(period))
-    outTrader = list(set(dftrade[dftrade['Date']>onPriod]['S_account']))
+    outTrader = list(set(list(set(dftrade[dftrade['Date']>onPriod]['S_account']))+list(set(dftrade[dftrade['Date']>onPriod]['B_account']))))
     DfOnPriod = dftrade[dftrade['Date']<=onPriod]
     if len(DfOnPriod)<=0:
         return json.dumps({'replay':False, 'msg':'اطلاعاتی موجود نیست'})
-    else:
-        DfOnPriod['out'] = DfOnPriod['B_account'].isin(outTrader)
-        DfOnPriod = DfOnPriod[DfOnPriod['out']==False]
-        DfOnPriodBuy = DfOnPriod.groupby(by='B_account').sum()[['Volume']]
-        DfOnPriodsel = DfOnPriod
-        DfOnPriodsel['buyer'] = DfOnPriod['S_account'].isin(list(DfOnPriodBuy.index))
-        DfOnPriodsel = DfOnPriodsel[DfOnPriodsel['buyer']==True]
-        DfOnPriodsel = DfOnPriodsel.groupby(by='S_account').sum()[['Volume']]
-        dftrade = DfOnPriodBuy.join(DfOnPriodsel, lsuffix='_buy', rsuffix='_sel')
-        dftrade['balance'] = dftrade['Volume_buy'] - dftrade['Volume_sel']
-        dftrade = dftrade[dftrade['balance']>0][['balance']].reset_index()
-        sumSediment =  dftrade['balance'].sum()
-        countSediment = len(dftrade)
-        dftrade['B_account'] = [CodeToName(x, symbol) for x in dftrade['B_account']]
-        dftrade['w'] = (dftrade['balance']/dftrade['balance'].max())+0.1
-        dftrade = dftrade.sort_values(by='w',ascending=False)
-        dftrade = dftrade.to_dict(orient='records')
-        return json.dumps({'replay':True,'countSediment':countSediment,'sumSediment':sumSediment, 'data':dftrade})
+    DfOnPriodBuy = DfOnPriod.groupby(by='B_account').sum()[['Volume']]
+    DfOnPriodsel = DfOnPriod.groupby(by='S_account').sum()[['Volume']]
+    dftrade = DfOnPriodBuy.join(DfOnPriodsel, lsuffix='_buy', rsuffix='_sel')
+    dftrade['out'] = dftrade.index.isin(outTrader)
+    dftrade = dftrade[dftrade['out']==False]
+    if len(dftrade)<=0:
+        return json.dumps({'replay':False, 'msg':'اطلاعاتی موجود نیست'})
+    dftrade['balance'] = dftrade['Volume_buy'] - dftrade['Volume_sel']
+    dftrade = dftrade[dftrade['balance']>0][['balance']].reset_index()
+    if len(dftrade)<=0:
+        return json.dumps({'replay':False, 'msg':'اطلاعاتی موجود نیست'})
+    sumSediment =  dftrade['balance'].sum()
+    countSediment = len(dftrade)
+    dftrade['name'] = [CodeToName(x, symbol) for x in dftrade['B_account']]
+    dftrade['w'] = (dftrade['balance']/dftrade['balance'].max())+0.1
+    dftrade = dftrade.sort_values(by='w',ascending=False)
+    dftrade = dftrade.to_dict(orient='records')
+    return json.dumps({'replay':True,'countSediment':countSediment,'sumSediment':sumSediment, 'data':dftrade})
 
 def traderlist(username):
     symbol = getSymbolOfUsername(username)
@@ -319,8 +341,32 @@ def traderlist(username):
 def detailes(username, account, fromDate, toDate):
     symbol = getSymbolOfUsername(username)
     symbol_db = client[f'{symbol}_db']
-    dftrader = pd.DataFrame(symbol_db['trade'].find({'B_account':account}))
-    dftrader = dftrader.append(pd.DataFrame(symbol_db['trade'].find({'S_account':account})))
+    dftrader =pd.DataFrame()
+    try:dftrader = pd.DataFrame(symbol_db['trade'].find({'B_account':account}))
+    except:pass
+    try:dftrader = dftrader.append(pd.DataFrame(symbol_db['trade'].find({'S_account':account})))
+    except:pass
+    if fromDate!=False:
+        dftrader = dftrader[dftrader['Date']>=int(fromDate)]
+    if toDate!=False:
+        dftrader = dftrader[dftrader['Date']<=int(toDate)]
+    dftrader = dftrader[['Volume','Price','B_account','S_account','Date','Time']]
+    dftrader = dftrader.sort_values(by=['Date','Time'], ascending=[True,True]).reset_index()
+    dftrader['B_account'] = [CodeToName(x, symbol) for x in dftrader['B_account']]
+    dftrader['S_account'] = [CodeToName(x, symbol) for x in dftrader['S_account']]
+    dftrader['Date'] = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in dftrader['Date']]
+    print(dftrader)
+    dftrader = dftrader.to_dict(orient='records')
+    return json.dumps({'replay':True, 'data':dftrader})
+
+def detailesGetCsv(username, account, fromDate, toDate):
+    symbol = getSymbolOfUsername(username)
+    symbol_db = client[f'{symbol}_db']
+    dftrader =pd.DataFrame()
+    try:dftrader = pd.DataFrame(symbol_db['trade'].find({'B_account':account}))
+    except:pass
+    try:dftrader = dftrader.append(pd.DataFrame(symbol_db['trade'].find({'S_account':account})))
+    except:pass
     if fromDate!=False:
         dftrader = dftrader[dftrader['Date']>=int(fromDate)]
     if toDate!=False:
@@ -329,6 +375,13 @@ def detailes(username, account, fromDate, toDate):
     dftrader = dftrader.sort_values(by=['Date','Time'], ascending=[True,True])
     dftrader['B_account'] = [CodeToName(x, symbol) for x in dftrader['B_account']]
     dftrader['S_account'] = [CodeToName(x, symbol) for x in dftrader['S_account']]
-    dftrader['Date'] = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in dftrader['Date']]
-    dftrader = dftrader.to_dict(orient='records')
-    return json.dumps({'replay':True, 'data':dftrader})
+
+    from io import BytesIO
+
+    bio = BytesIO()
+
+
+    writer = pd.ExcelWriter(bio)
+    dftrader.to_excel(writer, sheet_name="Sheet1")
+
+    return send_file(writer)
