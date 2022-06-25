@@ -32,7 +32,7 @@ def CodeToName(code, symbol):
     if len(name)>0:
         name = name['Fullname'][name.index.max()]
     else:
-        print('*'*5)
+
         name = code
     name = name.replace('(سهامی‌خاص)','')
 
@@ -107,6 +107,18 @@ def updateFile(symbol, Trade, Register):
     dfBalance['Balance'] = dfBalance['Volume_B'] - dfBalance['Volume_S']
     balance_collection.insert_many(dfBalance.to_dict(orient='records'))
     return json.dumps({'res':True,'msg':'اطلاعات با موفقیت ثبت شد'})
+def unavailable(username):
+    symbol = getSymbolOfUsername(username)
+    symbol_db = client[f'{symbol}_db']
+    allUpload = [x['Date'] for x in symbol_db['trade'].find({},{'Date':1,'_id':0})]
+    allUpload = list(set(allUpload))
+    allUpload = [int(x) for x in allUpload]
+    alltrade = requests.get(url=f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={getSymbolTseOfUsername(username)}&days=1500').json()
+    alltrade = [int(x['date'].replace('/','')) for x in alltrade]
+    listDate = [x for x in alltrade if x not in allUpload]
+    listDate.sort(reverse=True)
+    listDate = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in listDate]
+    return({'listDate':listDate,'count':len(listDate)})
 
 def tradersData(username, fromDate, toDate, side, sorting):
     symbol = getSymbolOfUsername(username)
@@ -188,8 +200,7 @@ def historicode(username, code):
     symbol = getSymbolOfUsername(username)
     symbol_db = client[f'{symbol}_db']
     alldatetrade = list(set(pd.DataFrame(symbol_db['trade'].find())['Date']))
-    print('-'*10)
-    print(alldatetrade)
+
     dfBalance = pd.DataFrame(symbol_db['balance'].find({'index':code})).drop(columns=['_id','Volume_B','Volume_S','index'])
     alldatetrade = list(filter(lambda x : x >= dfBalance['date'].min() , alldatetrade))
     alldatetrade = list(filter(lambda x : x <= dfBalance['date'].max() , alldatetrade))
@@ -241,7 +252,7 @@ def station(username, fromDate, toDate, side):
     if(fromDate==False):
         fromDate = symbol_db['trade'].find_one(sort=[("Date", -1)])['Date']
     if(toDate==False):
-        toDate = symbol_db['trade'].find_one(sort=[("Date", 1)])['Date']
+        toDate = symbol_db['trade'].find_one(sort=[("Date", -1)])['Date']
     dfTrader = pd.DataFrame(symbol_db['trade'].find({ 'Date' : { '$gte' :toDate  , '$lte' :fromDate }}))
     if len(dfTrader)==0:
         return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
@@ -258,7 +269,6 @@ def station(username, fromDate, toDate, side):
             #dfistgah['Istgah'][i] = farasahm_db['broker'].find_one({'TBKEY':' '+(i.replace(' ',''))})['TBNAME']
             try:dfistgah['Istgah'][i] = farasahm_db['broker'].find_one({'TBKEY':' '+(key.replace(' ',''))})['TBNAME']
             except:dfistgah['Istgah'][i] = 'نامعلوم'
-        print(dfistgah)
         dfistgah = dfistgah.to_dict(orient='records')
         return json.dumps({'replay':True,'data':dfistgah})
 
@@ -280,9 +290,7 @@ def dashbord(username):
 def tablo(username,date):
     dateStr = str(date)[0:4]+'/'+str(date)[4:6]+'/'+str(date)[6:8]
     req = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={getSymbolTseOfUsername(username)}&time={dateStr}'
-    print(req)
     tabloRequest = requests.get(url=req).json()
-    print(tabloRequest)
     return json.dumps(tabloRequest)
 
 
@@ -355,7 +363,6 @@ def detailes(username, account, fromDate, toDate):
     dftrader['B_account'] = [CodeToName(x, symbol) for x in dftrader['B_account']]
     dftrader['S_account'] = [CodeToName(x, symbol) for x in dftrader['S_account']]
     dftrader['Date'] = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in dftrader['Date']]
-    print(dftrader)
     dftrader = dftrader.to_dict(orient='records')
     return json.dumps({'replay':True, 'data':dftrader})
 

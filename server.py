@@ -69,6 +69,10 @@ def stocks_dataupdate():
     data = request.get_json()
     return stocks.dataupdate(data['username'])
 
+@app.route('/stocks/unavailable',methods = ['POST', 'GET'])
+def stocks_unavailable():
+    data = request.get_json()
+    return stocks.unavailable(data['username'])
 
 @app.route('/stocks/traders',methods = ['POST', 'GET'])
 def stocks_traders():
