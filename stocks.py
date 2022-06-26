@@ -120,7 +120,7 @@ def unavailable(username):
     listDate = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in listDate]
     return({'listDate':listDate,'count':len(listDate)})
 
-def tradersData(username, fromDate, toDate, side, sorting):
+def tradersData(username, fromDate, toDate, side):
     symbol = getSymbolOfUsername(username)
     symbol_db = client[f'{symbol}_db']
     trade_collection = symbol_db['trade']
@@ -133,7 +133,7 @@ def tradersData(username, fromDate, toDate, side, sorting):
     else:
         side = 'S_account'
     dftrade = pd.DataFrame(trade_collection.find({ 'Date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
-    dfbalance = pd.DataFrame(symbol_db['balance'].find({ 'date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
+    dfbalance = pd.DataFrame(symbol_db['balance'].find({ 'date' : {'$lte' : max(toDate,fromDate)}}))
 
     
     if len(dftrade)<=0:
@@ -147,14 +147,6 @@ def tradersData(username, fromDate, toDate, side, sorting):
         dfside['Price'] = dfside['Value']/dfside['Volume']
         dfside['code'] = dfside.index
         dfside.index = [CodeToName(x,symbol) for x in dfside.index]
-        if sorting == 'zvol':
-            dfside = dfside.sort_values(by=['Volume'],ascending=False)
-        elif sorting == 'avol':
-            dfside = dfside.sort_values(by=['Volume'],ascending=True)
-        elif sorting == 'aprc':
-            dfside = dfside.sort_values(by=['Price'],ascending=True)
-        elif sorting == 'zprc':
-            dfside = dfside.sort_values(by=['Price'],ascending=False)
         dfside = dfside.reset_index()
         dfside = dfside.reset_index()
         dfside.columns = ['id','name','volume','value','price','code']
@@ -170,7 +162,8 @@ def tradersData(username, fromDate, toDate, side, sorting):
         dffinall['balance'] = '-'
         for i in dffinall.index:
             balance = dfbalance[dfbalance['index']==dffinall['code'][i]]
-            balance = balance[balance['date']==balance['date'].max()]['Balance'].values[0]
+            print(balance)
+            balance = balance['Balance'].sum()
             dffinall['balance'][i] = balance
 
         dffinall = dffinall.to_dict('records')
@@ -350,15 +343,19 @@ def detailes(username, account, fromDate, toDate):
     symbol = getSymbolOfUsername(username)
     symbol_db = client[f'{symbol}_db']
     dftrader =pd.DataFrame()
-    try:dftrader = pd.DataFrame(symbol_db['trade'].find({'B_account':account}))
+    try:
+        dftrader = pd.DataFrame(symbol_db['trade'].find({'S_account':account}))
+        dftrader['Volume'] = dftrader['Volume']*-1
     except:pass
-    try:dftrader = dftrader.append(pd.DataFrame(symbol_db['trade'].find({'S_account':account})))
+    try:
+        dftrader = dftrader.append(pd.DataFrame(symbol_db['trade'].find({'B_account':account})))
     except:pass
     if fromDate!=False:
         dftrader = dftrader[dftrader['Date']>=int(fromDate)]
     if toDate!=False:
         dftrader = dftrader[dftrader['Date']<=int(toDate)]
     dftrader = dftrader[['Volume','Price','B_account','S_account','Date','Time']]
+
     dftrader = dftrader.sort_values(by=['Date','Time'], ascending=[True,True]).reset_index()
     dftrader['B_account'] = [CodeToName(x, symbol) for x in dftrader['B_account']]
     dftrader['S_account'] = [CodeToName(x, symbol) for x in dftrader['S_account']]
