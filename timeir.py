@@ -33,3 +33,14 @@ def today():
     now = str(now[0])+str(now[1])+str(now[2])
     now = int(now)
     return now
+
+def dateToStndr(input):
+    pros = input.split('/')
+    if len(pros[1])<2:
+        pros[1] = '0'+str(pros[1])
+    if len(pros[2])<2:
+        pros[2] = '0'+str(pros[2])
+    pros = pros[0]+'/'+pros[1]+'/'+pros[2]
+    return pros
+
+

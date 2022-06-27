@@ -134,12 +134,8 @@ def tradersData(username, fromDate, toDate, side):
         side = 'S_account'
     dftrade = pd.DataFrame(trade_collection.find({ 'Date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
     dfbalance = pd.DataFrame(symbol_db['balance'].find({ 'date' : {'$lte' : max(toDate,fromDate)}}))
-
-    
     if len(dftrade)<=0:
-        
         return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
-
     else:
         dftrade['Value'] = dftrade['Volume'] * dftrade['Price']
         dfside = dftrade.groupby(by=[side]).sum()
@@ -162,10 +158,9 @@ def tradersData(username, fromDate, toDate, side):
         dffinall['balance'] = '-'
         for i in dffinall.index:
             balance = dfbalance[dfbalance['index']==dffinall['code'][i]]
-            print(balance)
             balance = balance['Balance'].sum()
             dffinall['balance'][i] = balance
-
+        dffinall = dffinall.sort_values(by='volume',ascending=False)
         dffinall = dffinall.to_dict('records')
         return json.dumps({'replay':True, 'data':dffinall})
 
@@ -214,7 +209,6 @@ def newbie(username, fromDate, toDate):
         fromDate = symbol_db['trade'].find_one(sort=[("Date", -1)])['Date']
     if(toDate==False):
         toDate = symbol_db['trade'].find_one(sort=[("Date", 1)])['Date']
-
     dftrade = pd.DataFrame(symbol_db['trade'].find({ 'Date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
     if len(dftrade)<=0:
         return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
@@ -236,8 +230,11 @@ def newbie(username, fromDate, toDate):
                 newnum = len(newnew['Volume'])
                 dfnewtrader = dfnewtrader.append({'Date':i, 'newvol':newvolume, 'newnum':newnum , 'allvol':allgrp['Volume'].sum(), 'allnum':len(allgrp['Volume'])}, ignore_index=True)
         dfnewtrader = dfnewtrader.sort_values(by=['Date']).reset_index().drop(columns=['index'])
+
+        ToDayNewBie  = dfnewtrader[dfnewtrader['Date']==dfnewtrader['Date'].max()]
+        ToDayNewBie = ToDayNewBie.to_dict(orient='recodes')
         dfnewtrader = dfnewtrader.to_dict(orient='recodes')
-        return json.dumps({'replay':True,'data':dfnewtrader})
+        return json.dumps({'replay':True,'data':dfnewtrader, 'ToDayNewBie':ToDayNewBie})
 
 def station(username, fromDate, toDate, side):
     symbol = getSymbolOfUsername(username)
