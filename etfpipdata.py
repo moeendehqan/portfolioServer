@@ -36,12 +36,14 @@ def PipeData():
         history = history.sort_values(by=['dateInt'])
         history = history.reset_index()
         history['nav'] = 0
-        history['nav'][history.index.max()] = nav
+        history['nav'].loc[history.index.max()] = nav
         history['reserve'] = history['reserve'].fillna(method='backfill')
         history['miss'] = [x==None for x in history['trade_volume']]
         history = history[history['miss']==False]
         history = history.drop(columns=['instance_code','miss'])
+        history['reserve'] = history['reserve'].replace(np.nan,0)
         for i in ['close_price','final_price','first_price','highest_price','lowest_price','trade_volume','trade_number','trade_value','reserve','dateInt','nav']:
+            print(history[i])
             history[i] = [int(x) for x in history[i]]
         history['close_price_change_percent'] = [float(x.replace('%','')) for x in history['close_price_change_percent']]   
         collection = etf_db[f'{name}_collection']

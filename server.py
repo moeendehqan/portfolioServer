@@ -137,7 +137,7 @@ def stocks_detailesGetCsv():
 @app.route('/etf/nav',methods = ['POST', 'GET'])
 def etf_nav():
     data = request.get_json()
-    return etf.etf_nav(data['username'])
+    return etf.etf_nav(data['username'],data['fromDate'],data['toDate'])
 
 
 
