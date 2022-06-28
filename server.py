@@ -1,4 +1,5 @@
 import stocks
+import etf
 from flask import Flask, request
 import json
 from flask_cors import CORS
@@ -128,6 +129,17 @@ def stocks_detailes():
 def stocks_detailesGetCsv():
     data = request.get_json()
     return stocks.detailesGetCsv(data['username'], data['account'], data['fromDate'], data['toDate'])
+
+#---------------------------------etf--------------------------------------------
+
+
+
+@app.route('/etf/nav',methods = ['POST', 'GET'])
+def etf_nav():
+    data = request.get_json()
+    return etf.etf_nav(data['username'])
+
+
 
 
 
