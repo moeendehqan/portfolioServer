@@ -130,7 +130,7 @@ def tradersData(username, fromDate, toDate, side):
         side = 'B_account'
     else:
         side = 'S_account'
-    dftrade = pd.DataFrame(trade_collection.find({ 'Date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
+    dftrade = pd.DataFrame(trade_collection.find({ 'date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
     dfbalance = pd.DataFrame(symbol_db['balance'].find({ 'date' : {'$lte' : max(toDate,fromDate)}}))
     if len(dftrade)<=0:
         return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})

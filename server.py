@@ -139,6 +139,20 @@ def etf_nav():
     data = request.get_json()
     return etf.etf_nav(data['username'],data['fromDate'],data['toDate'])
 
+@app.route('/etf/volume',methods = ['POST', 'GET'])
+def etf_volume():
+    data = request.get_json()
+    return etf.etf_volume(data['username'],data['fromDate'],data['toDate'])
+
+
+@app.route('/etf/return',methods = ['POST', 'GET'])
+def etf_return():
+    data = request.get_json()
+    return etf.etf_return(data['username'],data['onDate'],data['target'])
+
+
+
+
 
 
 
