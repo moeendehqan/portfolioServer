@@ -1,3 +1,4 @@
+from h11 import Data
 import numpy as np
 import pymongo
 import json
@@ -106,8 +107,37 @@ def etf_return(username,onDate,target):
         del dic['index']
         del dic["final_price"]
         df = pd.DataFrame(dic.items(),columns=['period','ptp'])
-        df['periodint'] = [365/1,365/7,365/14,365/30,365/60,365/180,365/365]
+        df['periodint'] = [365/1, 365/7, 365/14, 365/30, 365/60, 365/180, 365/365]
         df['yearly'] = round(((((df['ptp']+1)**df['periodint'])-1)*100),2)
         df['ptp'] = [round((x*100),2) for x in df['ptp']]
         df['diff'] = df['yearly'] - int(target)
     return jsonify({'replay':True,'data':df.to_json(orient='records')})
+
+def etf_reserve(username, fromDate, toDate, etfSelect):
+    symbol = getSymbolOfUsername(username)
+    dfbase = pd.DataFrame(etf_db[f'{symbol}_collection'].find({},{ 'dateInt':1, '_id':0,'date':1,'reserve':1}))
+
+    if(fromDate==False):
+        fromDate = etf_db[f'{symbol}_collection'].find_one(sort=[("dateInt", -1)])['dateInt']
+    if(toDate==False):
+        toDate = etf_db[f'{symbol}_collection'].find_one(sort=[("dateInt", 1)])['dateInt']
+    dfbase = dfbase[dfbase['dateInt']>=min(fromDate,toDate)]
+    dfbase = dfbase[dfbase['dateInt']<=max(fromDate,toDate)]
+    if len(dfbase)==0:
+        return json.dumps({'replay':False, 'msg':'اطلاعاتی موجود نیست'})
+    if(etfSelect==None):
+        return json.dumps({'replay':True,'dfbase':{'replay':True, 'name':symbol, 'data':dfbase.to_json(orient='records')},'dfsub':{'replay':False}})
+    else:
+        dfsub = pd.DataFrame(etf_db[f'{etfSelect}_collection'].find({},{ 'dateInt':1, '_id':0,'date':1,'reserve':1}))
+
+
+        dfsub = dfsub[dfsub['dateInt']>=min(fromDate,toDate)]
+        dfsub = dfsub[dfsub['dateInt']<=max(fromDate,toDate)]
+        return json.dumps({'replay':True,'dfbase':{'replay':True, 'name':symbol, 'data':dfbase.to_json(orient='records')},'dfsub':{'replay':True,'name':etfSelect, 'data':dfsub.to_json(orient='records')}})
+
+
+
+def etf_etflist(username):
+    symbol = getSymbolOfUsername(username)
+    etfList = [{'symbol':x['نماد'],'name':x['نام صندوق']} for x in farasahm_db['etflist'].find() if x['نماد'] != symbol]
+    return json.dumps(etfList)

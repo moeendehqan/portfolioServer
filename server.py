@@ -150,9 +150,16 @@ def etf_return():
     data = request.get_json()
     return etf.etf_return(data['username'],data['onDate'],data['target'])
 
+@app.route('/etf/reserve',methods = ['POST', 'GET'])
+def etf_reserve():
+    data = request.get_json()
+    return etf.etf_reserve(data['username'],data['fromDate'],data['toDate'],data['etfSelect'])
 
 
-
+@app.route('/etf/etflist',methods = ['POST', 'GET'])
+def etf_etflist():
+    data = request.get_json()
+    return etf.etf_etflist(data['username'])
 
 
 
