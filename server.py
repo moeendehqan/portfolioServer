@@ -55,6 +55,14 @@ def account():
     dic = {'replay':replay, 'msg':msg, 'databack':databack}
     return json.dumps(dic)
 
+@app.route('/fulluser',methods = ['POST', 'GET'])
+def fulluser():
+    data = request.get_json()
+    user = list(userCl.find({'username':data['username']},{'_id':0}))
+    return json.dumps(user)
+
+
+#-------------------------Stocks------------------------------
 @app.route('/stocks/update',methods = ['POST', 'GET'])
 def stocks_update():
     user = request.form['user']

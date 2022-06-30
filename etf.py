@@ -1,3 +1,4 @@
+from ntpath import join
 from h11 import Data
 import numpy as np
 import pymongo
@@ -53,16 +54,23 @@ def etf_nav(username,fromDate,toDate):
     if(toDate==False):
         toDate = etf_db[f'{symbol}_collection'].find_one(sort=[("dateInt", 1)])['dateInt']
     df = pd.DataFrame(etf_db[f'{symbol}_collection'].find({ 'dateInt' : { '$gte' :  min(int(toDate),int(fromDate)), '$lte' : max(int(toDate),int(fromDate))}}))
+    if len(df)==0:
+        return json.dumps({'replay':False,'msg':'اطلاعاتی موجودی نیست'})
     df['deffNav'] = df['final_price'] - df['nav']
     df['RatedeffNav'] = (round(((df['final_price'] / df['nav'])-1)*10000))/100
     df['RatedeffNav'] = df['RatedeffNav'].replace(np.inf,0)
     df = df.sort_values(by=['dateInt'],ascending=False)
     df = df[['date','final_price','close_price_change_percent','nav','deffNav','RatedeffNav','dateInt']]
     df = df.to_json(orient='records')
-    return df
+    return json.dumps({'replay':True, 'data':df})
 
 def etf_volume(username,fromDate,toDate):
     symbol = getSymbolOfUsername(username)
+    if (fromDate==False) and (toDate==False):
+        limitLen = True
+    else:
+        limitLen:False
+
     if(fromDate==False):
         fromDate = etf_db[f'{symbol}_collection'].find_one(sort=[("dateInt", -1)])['dateInt']
     if(toDate==False):
@@ -73,6 +81,8 @@ def etf_volume(username,fromDate,toDate):
     df = df[df['dateInt']<max(int(fromDate),int(toDate))]
     df = df[df['dateInt']>min(int(fromDate),int(toDate))]
     df = df.sort_values(by=['dateInt'],ascending=True)
+    if limitLen:
+        df = (df[-30:])
     return df.to_json(orient='records')
 
 
@@ -116,24 +126,43 @@ def etf_return(username,onDate,target):
 def etf_reserve(username, fromDate, toDate, etfSelect):
     symbol = getSymbolOfUsername(username)
     dfbase = pd.DataFrame(etf_db[f'{symbol}_collection'].find({},{ 'dateInt':1, '_id':0,'date':1,'reserve':1}))
+    if (fromDate==False) and (toDate==False):
+        limitLen = True
+    else:
+        limitLen:False
 
     if(fromDate==False):
-        fromDate = etf_db[f'{symbol}_collection'].find_one(sort=[("dateInt", -1)])['dateInt']
+        fromDate = etf_db[f'{symbol}_collection'].find_one(sort=[("dateInt", 1)])['dateInt']
     if(toDate==False):
-        toDate = etf_db[f'{symbol}_collection'].find_one(sort=[("dateInt", 1)])['dateInt']
-    dfbase = dfbase[dfbase['dateInt']>=min(fromDate,toDate)]
-    dfbase = dfbase[dfbase['dateInt']<=max(fromDate,toDate)]
+        toDate = etf_db[f'{symbol}_collection'].find_one(sort=[("dateInt", -1)])['dateInt']
+    fromDate = int(fromDate)
+    toDate =int(toDate)
+    dfbase = dfbase[dfbase['dateInt']>=(fromDate)]
+    dfbase = dfbase[dfbase['dateInt']<=(toDate)]
+    dfbase = dfbase.set_index('dateInt')
     if len(dfbase)==0:
         return json.dumps({'replay':False, 'msg':'اطلاعاتی موجود نیست'})
     if(etfSelect==None):
-        return json.dumps({'replay':True,'dfbase':{'replay':True, 'name':symbol, 'data':dfbase.to_json(orient='records')},'dfsub':{'replay':False}})
+        if limitLen:
+            dfbase = (dfbase[-30:])
+        
+        AllStocks = list(farasahm_db['etflist'].find({'نماد':symbol},{'_id':0,'تعداد واحد':1}))[0]['تعداد واحد']
+
+        dfbase['reserve'] = round(((dfbase['reserve'] / int(AllStocks))*100),0)
+        return json.dumps({'replay':True,'data':{'base':True, 'basename':symbol, 'sub':False, 'df':dfbase.to_json(orient='records')}})
     else:
         dfsub = pd.DataFrame(etf_db[f'{etfSelect}_collection'].find({},{ 'dateInt':1, '_id':0,'date':1,'reserve':1}))
-
-
-        dfsub = dfsub[dfsub['dateInt']>=min(fromDate,toDate)]
-        dfsub = dfsub[dfsub['dateInt']<=max(fromDate,toDate)]
-        return json.dumps({'replay':True,'dfbase':{'replay':True, 'name':symbol, 'data':dfbase.to_json(orient='records')},'dfsub':{'replay':True,'name':etfSelect, 'data':dfsub.to_json(orient='records')}})
+        dfsub = dfsub[dfsub['dateInt']>=(fromDate)]
+        dfsub = dfsub[dfsub['dateInt']<=(toDate)]
+        dfsub = dfsub.set_index('dateInt')
+        AllStocks = list(farasahm_db['etflist'].find({'نماد':symbol},{'_id':0,'تعداد واحد':1}))[0]['تعداد واحد']
+        dfbase['reserve'] = round(((dfbase['reserve'] / int(AllStocks))*100),0)
+        AllStocks = list(farasahm_db['etflist'].find({'نماد':etfSelect},{'_id':0,'تعداد واحد':1}))[0]['تعداد واحد']
+        dfsub['reserve'] = round(((dfsub['reserve'] / int(AllStocks))*100),0)
+        df = dfbase.join(dfsub,lsuffix='B', rsuffix='S', how='left')
+        if limitLen:
+            df = (df[-30:])
+        return json.dumps({'replay':True,'data':{'base':True, 'basename':symbol,'sub':True, 'subname':etfSelect, 'df':df.to_json(orient='records')}})
 
 
 
