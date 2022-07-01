@@ -141,6 +141,10 @@ def stocks_detailesGetCsv():
 #---------------------------------etf--------------------------------------------
 
 
+@app.route('/etf/dashboard',methods = ['POST', 'GET'])
+def etf_dashboard():
+    data = request.get_json()
+    return etf.etf_dashboard(data['username'])
 
 @app.route('/etf/nav',methods = ['POST', 'GET'])
 def etf_nav():

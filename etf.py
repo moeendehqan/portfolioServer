@@ -170,3 +170,10 @@ def etf_etflist(username):
     symbol = getSymbolOfUsername(username)
     etfList = [{'symbol':x['نماد'],'name':x['نام صندوق']} for x in farasahm_db['etflist'].find() if x['نماد'] != symbol]
     return json.dumps(etfList)
+
+
+def etf_dashboard(username):
+    symbol = getSymbolOfUsername(username)
+    lastDay = etf_db[f'{symbol}_collection'].find_one(sort=[("dateInt", -1)])
+    del lastDay['_id']
+    return json.dumps(lastDay)
