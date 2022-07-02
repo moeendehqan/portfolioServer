@@ -6,6 +6,8 @@ import numpy as np
 from numpy import mean
 import collections 
 from flask  import  send_file
+import zipfile
+from io import StringIO
 
 client = pymongo.MongoClient()
 farasahm_db = client['farasahm']
@@ -50,61 +52,103 @@ def getSymbolTseOfUsername(userName):
     else:
         return False
 
-def updateFile(symbol, Trade, Register):
+
+def updateFile(symbol, daily):
     symbol_db = client[f'{symbol}_db']
     trade_collection = symbol_db['trade']
     register_collection = symbol_db['register']
     balance_collection = symbol_db['balance']
-    TradeType = Trade.filename.split('.')[-1]
-    RegisterType = Register.filename.split('.')[-1]
-    if TradeType == 'xlsx':
-        dfTrade = pd.read_excel(Trade)
-    elif TradeType == 'csv':
-        dfTrade = pd.read_csv(Trade, encoding='utf-16', sep='\t')
-    else:
-        return json.dumps({'res':False,'msg':'نوع فایل معاملات مجاز نیست'})
+    change_collection = symbol_db['change']
 
-    if RegisterType == 'xlsx':
-        dfRegister = pd.read_excel(Register)
-    elif RegisterType == 'csv':
-        dfRegister = pd.read_csv(Register, encoding='utf-16', sep='\t')
+    archive = zipfile.ZipFile(daily, 'r')
+    listZip = archive.namelist()
+    if len(listZip)!=3:
+        return json.dumps({'res':False,'msg':'فایل روزانه صحیح نیست'})
+    for i in listZip:
+
+        if 'trades' in i:
+            dfTrade = archive.read(i)
+            if len(dfTrade)>0:
+                dfTrade = str(dfTrade,'utf-16')
+                dfTrade = StringIO(dfTrade) 
+                dfTrade = pd.read_csv(dfTrade, sep='\t')
+                if (is_trade_file(dfTrade)==False) or (symbol != dfTrade['Symbol'][dfTrade.index.min()]) or (dfTrade['Date'].max() != dfTrade['Date'].min()):
+                    return json.dumps({'res':False,'msg':'محتویات فایل صحیح نیست'})
+                cl_trade = pd.DataFrame(trade_collection.find({'Date':int(dfTrade['Date'].max())}))
+                if len(cl_trade)>0:
+                    trade_collection.delete_many({'Date':int(dfTrade['Date'].max())})
+                trade_collection.insert_many(dfTrade.to_dict(orient='records'))
+
+        elif 'registries' in i:
+            dfRegister = archive.read(i)
+            if len(dfRegister)>0:
+                dfRegister = str(dfRegister,'utf-16')
+                dfRegister = StringIO(dfRegister) 
+                dfRegister = pd.read_csv(dfRegister, sep='\t')
+                if is_register_file(dfRegister)==False:
+                    return json.dumps({'res':False,'msg':'محتویات فایل صحیح نیست'})
+                cl_register = pd.DataFrame(register_collection.find())
+                if len(cl_register)>0:
+                    cl_register = cl_register.drop(columns='_id')
+                dfRegister = dfRegister.append(cl_register)
+                dfRegister = dfRegister.drop_duplicates(subset=['Account'])
+                register_collection.drop()
+                register_collection.insert_many(dfRegister.to_dict(orient='records'))
+
+        elif 'changes' in i:
+            dfChange = archive.read(i)
+            if len(dfChange)>0:
+                dfChange = str(dfChange,'utf-16')
+                dfChange = StringIO(dfChange)
+                dfChange = pd.read_csv(dfChange, sep='\t')
+                if len(dfChange)>0:
+                    standard_culomns = ['Symbol','Date','Account','Onh_volume','Byn_volume','Letter_Dat','Letter_No']
+                    if (collections.Counter(list(dfChange.columns)) == collections.Counter(standard_culomns) == False) or (symbol != dfChange['Symbol'][dfChange.index.min()]):
+                        return json.dumps({'res':False,'msg':'محتویات فایل صحیح نیست'})
+                    cl_Change = pd.DataFrame(change_collection.find({'Date':int(dfChange['Date'].max())}))
+                    if len(cl_Change)>0:
+                        change_collection.delete_many({'Date':int(dfChange['Date'].max())})
+                    change_collection.insert_many(dfChange.to_dict(orient='records'))
+        else:
+            return json.dumps({'res':False,'msg':'محتویات فایل صحیح نیست'})
+    if len(dfTrade)>0:
+        cl_balance = pd.DataFrame(balance_collection.find({'Date':int(dfTrade['Date'].max())}))
+        if len(cl_balance)>0:
+            balance_collection.delete_many({'Date':int(dfTrade['date'].max())})
+        blnc_buy =  dfTrade.groupby('B_account').sum()
+        blnc_sel =  dfTrade.groupby('S_account').sum()
+        blnc_buy = blnc_buy.reset_index()[['B_account','Volume']]
+        blnc_buy = blnc_buy.set_index('B_account')
+        blnc_sel = blnc_sel.reset_index()[['S_account','Volume']]
+        blnc_sel = blnc_sel.set_index('S_account')
+        dfBalance = blnc_buy.join(blnc_sel, lsuffix='_B',rsuffix= '_S', how='outer')
+        dfBalance['date'] = dfTrade['Date'].max()
+        dfBalance = dfBalance.replace(np.nan, 0)
+        dfBalance['Balance'] = dfBalance['Volume_B'] - dfBalance['Volume_S']
+        dfBalance = dfBalance.reset_index()
+        if len(dfChange)>0:
+            for i in dfChange.index:
+                if dfChange['Account'][i] not in dfBalance.index:
+                    dic ={'index':dfChange['Account'][i], 'Volume_B':0, 'Volume_S':0, 'date':dfChange['Date'].max(), 'Balance':(dfChange['Onh_volume'][i]+dfChange['Byn_volume'][i])}
+                    dfBalance = dfBalance.append(dic, ignore_index=True)
+                else:
+                    dfBalance['Balance'][i] = dfBalance['Balance'][i] + (dfChange['Onh_volume'][i]+dfChange['Byn_volume'][i])
+        dfBalance.to_excel('vv.xlsx')
+        balance_collection.insert_many(dfBalance.to_dict(orient='records'))
+
     else:
-        return json.dumps({'res':False,'msg':'نوع فایل رجیستر مجاز نیست'})
-    if is_trade_file(dfTrade)==False:
-        return json.dumps({'res':False,'msg':'محتویات فایل معاملات صحیح نیست'})
-    if symbol != dfTrade['Symbol'][dfTrade.index.min()]:
-        return json.dumps({'res':False,'msg':'محتویات فایل معاملات صحیح نیست'})
-    if dfTrade['Date'].max() != dfTrade['Date'].min():
-        return json.dumps({'res':False,'msg':'محتویات فایل معاملات صحیح نیست'})
-    if is_register_file(dfRegister)==False:
-        return json.dumps({'res':False,'msg':'محتویات فایل رجیستر صحیح نیست'})
-    cl_trade = pd.DataFrame(trade_collection.find({'Date':int(dfTrade['Date'].max())}))
-    if len(cl_trade)>0:
-        trade_collection.delete_many({'Date':int(dfTrade['Date'].max())})
-    trade_collection.insert_many(dfTrade.to_dict(orient='records'))
-    cl_register = pd.DataFrame(register_collection.find())
-    if len(cl_register)>0:
-        cl_register = cl_register.drop(columns='_id')
-    dfRegister = dfRegister.append(cl_register)
-    dfRegister = dfRegister.drop_duplicates(subset=['Account'])
-    register_collection.drop()
-    register_collection.insert_many(dfRegister.to_dict(orient='records'))
-    cl_balance = pd.DataFrame(balance_collection.find({'Date':int(dfTrade['Date'].max())}))
-    if len(cl_balance)>0:
-        balance_collection.delete_many({'Date':int(dfTrade['date'].max())})
-    blnc_buy =  dfTrade.groupby('B_account').sum()
-    blnc_sel =  dfTrade.groupby('S_account').sum()
-    blnc_buy = blnc_buy.reset_index()[['B_account','Volume']]
-    blnc_buy = blnc_buy.set_index('B_account')
-    blnc_sel = blnc_sel.reset_index()[['S_account','Volume']]
-    blnc_sel = blnc_sel.set_index('S_account')
-    dfBalance = blnc_buy.join(blnc_sel, lsuffix='_B',rsuffix= '_S', how='outer')
-    dfBalance = dfBalance.reset_index()
-    dfBalance['date'] = dfTrade['Date'].max()
-    dfBalance = dfBalance.replace(np.nan, 0)
-    dfBalance['Balance'] = dfBalance['Volume_B'] - dfBalance['Volume_S']
-    balance_collection.insert_many(dfBalance.to_dict(orient='records'))
+        if len(dfChange)>0:
+            cl_balance = pd.DataFrame(balance_collection.find({'date':int(dfChange['Date'].max())}))
+            if len(cl_balance)>0:
+                balance_collection.delete_many({'date':int(dfChange['Date'].max())})
+            for i in dfChange.index:
+                dic ={'index':dfChange['Account'][i], 'Volume_B':0, 'Volume_S':0, 'date':int(dfChange['Date'].max()), 'Balance':float(dfChange['Onh_volume'][i]+dfChange['Byn_volume'][i])}
+                balance_collection.insert_one(dic)
+
     return json.dumps({'res':True,'msg':'اطلاعات با موفقیت ثبت شد'})
+
+
+
 def unavailable(username):
     symbol = getSymbolOfUsername(username)
     symbol_db = client[f'{symbol}_db']
@@ -125,12 +169,15 @@ def tradersData(username, fromDate, toDate, side):
     if(fromDate==False):
         fromDate = trade_collection.find_one(sort=[("Date", -1)])['Date']
     if(toDate==False):
-        toDate = trade_collection.find_one(sort=[("Date", -1)])['Date']
+        toDate = trade_collection.find_one(sort=[("Date", 1)])['Date']
     if side=='buy':
         side = 'B_account'
     else:
         side = 'S_account'
-    dftrade = pd.DataFrame(trade_collection.find({ 'date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
+    print(fromDate)
+    print(toDate)
+    dftrade = pd.DataFrame(trade_collection.find({ 'Date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
+    print(dftrade)
     dfbalance = pd.DataFrame(symbol_db['balance'].find({ 'date' : {'$lte' : max(toDate,fromDate)}}))
     if len(dftrade)<=0:
         return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
@@ -358,29 +405,17 @@ def detailes(username, account, fromDate, toDate):
     dftrader = dftrader.to_dict(orient='records')
     return json.dumps({'replay':True, 'data':dftrader})
 
-def detailesGetCsv(username, account, fromDate, toDate):
-    symbol = getSymbolOfUsername(username)
-    symbol_db = client[f'{symbol}_db']
-    dftrader =pd.DataFrame()
-    try:dftrader = pd.DataFrame(symbol_db['trade'].find({'B_account':account}))
-    except:pass
-    try:dftrader = dftrader.append(pd.DataFrame(symbol_db['trade'].find({'S_account':account})))
-    except:pass
-    if fromDate!=False:
-        dftrader = dftrader[dftrader['Date']>=int(fromDate)]
-    if toDate!=False:
-        dftrader = dftrader[dftrader['Date']<=int(toDate)]
-    dftrader = dftrader[['Volume','Price','B_account','S_account','Date','Time']]
-    dftrader = dftrader.sort_values(by=['Date','Time'], ascending=[True,True])
-    dftrader['B_account'] = [CodeToName(x, symbol) for x in dftrader['B_account']]
-    dftrader['S_account'] = [CodeToName(x, symbol) for x in dftrader['S_account']]
-
-    from io import BytesIO
-
-    bio = BytesIO()
+'''
+username='test1'
+symbol = getSymbolOfUsername(username)
+symbol_db = client[f'{symbol}_db']
+dfBalance = pd.DataFrame(symbol_db['balance'].find({},{'_id':0,'Volume_B':0,'Volume_S':0}))
+dfBalance = pd.pivot_table(dfBalance,index='date',columns='index',aggfunc=np.sum)
+dfBalance = dfBalance.sort_index()
+dfBalance = dfBalance.fillna(method='ffill').replace(np.nan,0)
+corr = dfBalance.corr(method='pearson',min_periods=1)
+dfBalance.to_excel('moeen.xlsx')
+print(corr)'''
 
 
-    writer = pd.ExcelWriter(bio)
-    dftrader.to_excel(writer, sheet_name="Sheet1")
 
-    return send_file(writer)

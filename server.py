@@ -66,13 +66,13 @@ def fulluser():
 @app.route('/stocks/update',methods = ['POST', 'GET'])
 def stocks_update():
     user = request.form['user']
-    Trade =  request.files['Trade']
-    Register =  request.files['Register']
+    daily =  request.files['daily']
     symbol = stocks.getSymbolOfUsername(user)
     if symbol==False:
         return json.dumps({'repaly':False,'msg':'نماد یافت نشد'})
     else:
-        return stocks.updateFile(symbol, Trade, Register)
+        return stocks.updateFile(symbol, daily)
+
 @app.route('/stocks/dataupdate',methods = ['POST', 'GET'])
 def stocks_dataupdate():
     data = request.get_json()
