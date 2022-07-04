@@ -67,11 +67,13 @@ def fulluser():
 def stocks_update():
     user = request.form['user']
     daily =  request.files['daily']
+    try:registerdaily =  request.files['registerdaily']
+    except:registerdaily = False
     symbol = stocks.getSymbolOfUsername(user)
     if symbol==False:
         return json.dumps({'repaly':False,'msg':'نماد یافت نشد'})
     else:
-        return stocks.updateFile(symbol, daily)
+        return stocks.updateFile(symbol, daily, registerdaily)
 
 @app.route('/stocks/dataupdate',methods = ['POST', 'GET'])
 def stocks_dataupdate():

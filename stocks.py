@@ -1,3 +1,4 @@
+import time
 import json
 import pandas as pd
 import pymongo
@@ -53,19 +54,18 @@ def getSymbolTseOfUsername(userName):
         return False
 
 
-def updateFile(symbol, daily):
+def updateFile(symbol, daily, registerdaily):
     symbol_db = client[f'{symbol}_db']
     trade_collection = symbol_db['trade']
     register_collection = symbol_db['register']
     balance_collection = symbol_db['balance']
     change_collection = symbol_db['change']
-
     archive = zipfile.ZipFile(daily, 'r')
     listZip = archive.namelist()
+    
     if len(listZip)!=3:
         return json.dumps({'res':False,'msg':'فایل روزانه صحیح نیست'})
     for i in listZip:
-
         if 'trades' in i:
             dfTrade = archive.read(i)
             if len(dfTrade)>0:
@@ -111,40 +111,88 @@ def updateFile(symbol, daily):
                     change_collection.insert_many(dfChange.to_dict(orient='records'))
         else:
             return json.dumps({'res':False,'msg':'محتویات فایل صحیح نیست'})
-    if len(dfTrade)>0:
-        cl_balance = pd.DataFrame(balance_collection.find({'Date':int(dfTrade['Date'].max())}))
-        if len(cl_balance)>0:
-            balance_collection.delete_many({'Date':int(dfTrade['date'].max())})
-        blnc_buy =  dfTrade.groupby('B_account').sum()
-        blnc_sel =  dfTrade.groupby('S_account').sum()
-        blnc_buy = blnc_buy.reset_index()[['B_account','Volume']]
-        blnc_buy = blnc_buy.set_index('B_account')
-        blnc_sel = blnc_sel.reset_index()[['S_account','Volume']]
-        blnc_sel = blnc_sel.set_index('S_account')
-        dfBalance = blnc_buy.join(blnc_sel, lsuffix='_B',rsuffix= '_S', how='outer')
-        dfBalance['date'] = dfTrade['Date'].max()
-        dfBalance = dfBalance.replace(np.nan, 0)
-        dfBalance['Balance'] = dfBalance['Volume_B'] - dfBalance['Volume_S']
-        dfBalance = dfBalance.reset_index()
-        if len(dfChange)>0:
-            for i in dfChange.index:
-                if dfChange['Account'][i] not in dfBalance.index:
-                    dic ={'index':dfChange['Account'][i], 'Volume_B':0, 'Volume_S':0, 'date':dfChange['Date'].max(), 'Balance':(dfChange['Onh_volume'][i]+dfChange['Byn_volume'][i])}
-                    dfBalance = dfBalance.append(dic, ignore_index=True)
-                else:
-                    dfBalance['Balance'][i] = dfBalance['Balance'][i] + (dfChange['Onh_volume'][i]+dfChange['Byn_volume'][i])
-        dfBalance.to_excel('vv.xlsx')
+
+    if registerdaily != False:
+        archive = zipfile.ZipFile(registerdaily, 'r')
+        listZip = archive.namelist()
+        if len(listZip)!=1:
+            return json.dumps({'res':False,'msg':'فایل روزانه صحیح نیست'})
+        dfBalance = archive.read(listZip[0]) 
+        if len(dfBalance)<0:
+            return json.dumps({'res':False,'msg':'محتویات فایل صحیح نیست'})
+        dfBalance = str(dfBalance,'utf-16')
+        dfBalance = StringIO(dfBalance) 
+        dfBalance = pd.read_csv(dfBalance, sep='\t')
+        standard_culomns = ['Lastname','Firstname','Account','Active','Birthday','CIRPHO','Date','Father','Isno','Ispl','NationalId','Saham','Sepordeh','Symbol','Type']
+        if (collections.Counter(list(dfBalance.columns)) == collections.Counter(standard_culomns) == False):
+            return json.dumps({'res':False,'msg':'محتویات فایل صحیح نیست'})
+        cl_Balance = pd.DataFrame(balance_collection.find({'Date':int(dfBalance['Date'].max())}))
+        if len(cl_Balance):
+            balance_collection.delete_many({'Date':int(dfBalance['Date'].max())})
         balance_collection.insert_many(dfBalance.to_dict(orient='records'))
-
     else:
-        if len(dfChange)>0:
-            cl_balance = pd.DataFrame(balance_collection.find({'date':int(dfChange['Date'].max())}))
-            if len(cl_balance)>0:
-                balance_collection.delete_many({'date':int(dfChange['Date'].max())})
-            for i in dfChange.index:
-                dic ={'index':dfChange['Account'][i], 'Volume_B':0, 'Volume_S':0, 'date':int(dfChange['Date'].max()), 'Balance':float(dfChange['Onh_volume'][i]+dfChange['Byn_volume'][i])}
-                balance_collection.insert_one(dic)
+        if len(dfTrade)>0:
+            cl_Balance = pd.DataFrame(balance_collection.find())
+            if '_id' in cl_Balance.columns: cl_Balance.drop(columns='_id')
+            byg = dfTrade.groupby(by=['B_account']).sum()
+            slg = dfTrade.groupby(by=['S_account']).sum()
+            grp = byg.join(slg, how='outer', lsuffix='_B', rsuffix='_S')
+            grp = grp.replace(np.nan,0)
+            grp['Balance'] = grp['Volume_B']-grp['Volume_S']
+            grp = grp[['Balance']]
+            for i in grp.index:
+                AccB = pd.DataFrame(balance_collection.find({'Account':i}))
 
+                if(len(AccB))>0:
+                    AccB = AccB[AccB['Date']<dfTrade['Date'].max()]
+                    if(len(AccB))>0:
+                        AccB = AccB[AccB['Date'] == AccB['Date'].max()]
+                        AccB = AccB.drop(columns='_id')
+                        AccB['Saham'] = AccB['Saham'] + grp['Balance'][i]
+                        AccB['Sepordeh'] = AccB['Sepordeh'] + grp['Balance'][i]
+                        balance_collection.insert_one(AccB.to_dict(orient='records')[0])
+                    else:
+                        AccR = dfRegister[dfRegister['Account']==i]
+                        dic = {'Lastname':AccR['Lastname'][AccR.index.max()],
+                                'Firstname':AccR['Firstname'][AccR.index.max()] ,
+                                'Account':AccR['Account'][AccR.index.max()] ,
+                                'Active':np.nan ,
+                                'Birthday':AccR['Birthday'][AccR.index.max()] ,
+                                'CIRPHO':np.nan  ,
+                                'Date': int(dfTrade['Date'].max()) ,
+                                'Father':AccR['Father'][AccR.index.max()] ,
+                                'Isno':AccR['Isno'][AccR.index.max()] ,
+                                'Ispl':AccR['Ispl'][AccR.index.max()] ,
+                                'NationalId':int(AccR['NationalId'][AccR.index.max()]) ,
+                                'Saham':grp['Balance'][i] ,
+                                'Sepordeh':grp['Balance'][i] ,
+                                'Symbol':dfTrade['Symbol'][dfTrade.index.min()] ,
+                                'Type':str(AccR['Type'][AccR.index.max()])
+                        }
+                        balance_collection.insert_one(dic)
+                else:
+                    AccR = dfRegister[dfRegister['Account']==i]
+                    dic = {'Lastname':AccR['Lastname'][AccR.index.max()],
+                            'Firstname':AccR['Firstname'][AccR.index.max()] ,
+                            'Account':AccR['Account'][AccR.index.max()] ,
+                            'Active':np.nan ,
+                            'Birthday':AccR['Birthday'][AccR.index.max()] ,
+                            'CIRPHO':np.nan  ,
+                            'Date':int(dfTrade['Date'].max()) ,
+                            'Father':AccR['Father'][AccR.index.max()] ,
+                            'Isno':AccR['Isno'][AccR.index.max()] ,
+                            'Ispl':AccR['Ispl'][AccR.index.max()] ,
+                            'NationalId':int(AccR['NationalId'][AccR.index.max()]) ,
+                            'Saham':grp['Balance'][i] ,
+                            'Sepordeh':grp['Balance'][i] ,
+                            'Symbol':dfTrade['Symbol'][dfTrade.index.min()] ,
+                            'Type':str(AccR['Type'][AccR.index.max()])
+                    }
+
+                    balance_collection.insert_one(dic)
+
+
+        
     return json.dumps({'res':True,'msg':'اطلاعات با موفقیت ثبت شد'})
 
 
@@ -169,16 +217,13 @@ def tradersData(username, fromDate, toDate, side):
     if(fromDate==False):
         fromDate = trade_collection.find_one(sort=[("Date", -1)])['Date']
     if(toDate==False):
-        toDate = trade_collection.find_one(sort=[("Date", 1)])['Date']
+        toDate = trade_collection.find_one(sort=[("Date", -1)])['Date']
     if side=='buy':
         side = 'B_account'
     else:
         side = 'S_account'
-    print(fromDate)
-    print(toDate)
     dftrade = pd.DataFrame(trade_collection.find({ 'Date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
-    print(dftrade)
-    dfbalance = pd.DataFrame(symbol_db['balance'].find({ 'date' : {'$lte' : max(toDate,fromDate)}}))
+    dfbalance = pd.DataFrame(symbol_db['balance'].find({'Date':max(toDate,fromDate)}))
     if len(dftrade)<=0:
         return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
     else:
@@ -202,9 +247,9 @@ def tradersData(username, fromDate, toDate, side):
         dffinall['price'] = [round(x) for x in dffinall['price']]
         dffinall['balance'] = '-'
         for i in dffinall.index:
-            balance = dfbalance[dfbalance['index']==dffinall['code'][i]]
-            balance = balance['Balance'].sum()
-            dffinall['balance'][i] = balance
+            balance = dfbalance[dfbalance['Account']==dffinall['code'][i]]
+            balance = balance['Saham'][balance.index.max()]
+            dffinall['balance'].iloc[i] = balance
         dffinall = dffinall.sort_values(by='volume',ascending=False)
         dffinall = dffinall.to_dict('records')
         return json.dumps({'replay':True, 'data':dffinall})
@@ -234,16 +279,16 @@ def historicode(username, code):
     symbol_db = client[f'{symbol}_db']
     alldatetrade = list(set(pd.DataFrame(symbol_db['trade'].find())['Date']))
 
-    dfBalance = pd.DataFrame(symbol_db['balance'].find({'index':code})).drop(columns=['_id','Volume_B','Volume_S','index'])
-    alldatetrade = list(filter(lambda x : x >= dfBalance['date'].min() , alldatetrade))
-    alldatetrade = list(filter(lambda x : x <= dfBalance['date'].max() , alldatetrade))
+    dfBalance = pd.DataFrame(symbol_db['balance'].find({'Account':code}))[['Date','Saham']]
+    alldatetrade = list(filter(lambda x : x >= dfBalance['Date'].min() , alldatetrade))
+    alldatetrade = list(filter(lambda x : x <= dfBalance['Date'].max() , alldatetrade))
 
     for i in alldatetrade:
-        if i not in list(dfBalance['date']):
-            dfBalance.loc[dfBalance.index.max()+1]=[i,0]
-    dfBalance = dfBalance.sort_values(by='date').reset_index().drop(columns=['index'])
-    dfBalance['cum'] = dfBalance['Balance'].cumsum()
-    dfBalance = dfBalance.drop(columns=['Balance'])
+        if i not in list(dfBalance['Date']):
+            dfBalance = dfBalance.append({'Date':i,'Saham':np.nan}, ignore_index=True)
+    dfBalance = dfBalance.sort_values(by='Date').reset_index().drop(columns=['index'])
+    dfBalance = dfBalance.fillna(method='ffill')
+    dfBalance = dfBalance.where(dfBalance>0, 0)
     dfBalance = dfBalance.to_dict(orient='records')
     return json.dumps({'replay':True,'data':dfBalance})
 
@@ -311,16 +356,25 @@ def dashbord(username):
     symbol = getSymbolOfUsername(username)
     symbol_db = client[f'{symbol}_db']
     lastUpdate = symbol_db['trade'].find_one(sort=[("Date", -1)])['Date']
-    topBuy = pd.DataFrame(symbol_db['balance'].find({'date':lastUpdate},sort=[("Balance", -1)]).limit(10))[['index','Balance']]
-    topBuy.index = [CodeToName(x,symbol) for x in topBuy['index']]
-    topBuy = topBuy.drop(columns='index')
+    lastUpdate = pd.DataFrame(symbol_db['trade'].find({'Date':lastUpdate}))
+    topBuy = lastUpdate.groupby(by=['B_account']).sum()[['Volume']]
+    topSel = lastUpdate.groupby(by=['S_account']).sum()[['Volume']]
+    topBuy = topBuy.sort_values(by=['Volume'],ascending=False).reset_index()
+    topSel = topSel.sort_values(by=['Volume'],ascending=False).reset_index()
+    topBuy = topBuy[topBuy.index<10]
+    topSel = topSel[topSel.index<10]
+    topBuy.index = [CodeToName(x, symbol) for x in topBuy['B_account']]
+    topSel.index = [CodeToName(x, symbol) for x in topSel['S_account']]
+    topBuy['name'] = topBuy.index
+    topSel['name'] = topSel.index
+    topBuy = topBuy.drop(columns=['B_account'])
+    topSel = topSel.drop(columns=['S_account'])
     topBuy = topBuy.to_dict(orient='dict')
-    topSel = pd.DataFrame(symbol_db['balance'].find({'date':lastUpdate},sort=[("Balance", 1)]).limit(10))[['index','Balance']]
-    topSel.index = [CodeToName(x,symbol) for x in topSel['index']]
-    topSel = topSel.drop(columns='index')
-    topSel['Balance'] =topSel['Balance']*-1
     topSel = topSel.to_dict(orient='dict')
-    return json.dumps({'replay':True,'lastUpdate':lastUpdate,'topBuy':topBuy,'topSel':topSel})
+    lastUpdate = str(lastUpdate['Date'].max())
+    lastUpdateStr = str(lastUpdate)
+    lastUpdateStr = lastUpdateStr[0:4]+'/'+lastUpdateStr[4:6]+'/'+lastUpdateStr[6:8]
+    return json.dumps({'replay':True,'lastUpdate':lastUpdate,'lastUpdateStr':lastUpdateStr,'topBuy':topBuy,'topSel':topSel})
 
 def tablo(username,date):
     dateStr = str(date)[0:4]+'/'+str(date)[4:6]+'/'+str(date)[6:8]
@@ -407,15 +461,33 @@ def detailes(username, account, fromDate, toDate):
 
 '''
 username='test1'
+onDate = False
+
 symbol = getSymbolOfUsername(username)
 symbol_db = client[f'{symbol}_db']
+trade_collection = symbol_db['trade']
+if(onDate==False):
+    fromDate = trade_collection.find_one(sort=[("Date", -1)])['Date']
+
 dfBalance = pd.DataFrame(symbol_db['balance'].find({},{'_id':0,'Volume_B':0,'Volume_S':0}))
 dfBalance = pd.pivot_table(dfBalance,index='date',columns='index',aggfunc=np.sum)
 dfBalance = dfBalance.sort_index()
-dfBalance = dfBalance.fillna(method='ffill').replace(np.nan,0)
-corr = dfBalance.corr(method='pearson',min_periods=1)
-dfBalance.to_excel('moeen.xlsx')
-print(corr)'''
+dfBalance = dfBalance.Balance
+dfBalance = dfBalance.fillna(method='ffill')
+listColumns = dfBalance.isnull().sum()>(dfBalance.isnull().sum().max()*0.3)
+listColumns = listColumns[listColumns==True]
+listColumns = list(listColumns.index)
+dfBalance = dfBalance.drop(columns=listColumns)
+dfBalance = dfBalance.replace(np.nan, 0)
+dfBalance = (dfBalance / dfBalance.shift(-1))-1
+print(dfBalance)
+corr = dfBalance.corr(method='pearson')
 
+findList= []
+for i in corr.columns:
+    print(i)
+    op = corr.index[corr[i]>0.9].tolist()
+    dic = {'i':op}
+    findList.append(dic)
 
-
+print(findList)'''
