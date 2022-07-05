@@ -319,11 +319,16 @@ def newbie(username, fromDate, toDate):
                 newvolume = newnew['Volume'].sum()
                 newnum = len(newnew['Volume'])
                 dfnewtrader = dfnewtrader.append({'Date':i, 'newvol':newvolume, 'newnum':newnum , 'allvol':allgrp['Volume'].sum(), 'allnum':len(allgrp['Volume'])}, ignore_index=True)
-        dfnewtrader = dfnewtrader.sort_values(by=['Date']).reset_index().drop(columns=['index'])
-
-        ToDayNewBie  = dfnewtrader[dfnewtrader['Date']==dfnewtrader['Date'].max()]
+        dfnewtrader = dfnewtrader.sort_values(by=['Date'] ,ascending=False).reset_index().drop(columns=['index'])
+        ToDayNewBie = dfnewtrader[dfnewtrader['Date']==dfnewtrader['Date'].max()]
         ToDayNewBie = ToDayNewBie.to_dict(orient='recodes')
+        dfnewtrader['Date'] = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in dfnewtrader['Date']]
+        dfnewtrader['numper'] =(dfnewtrader['newnum']/dfnewtrader['allnum'])*10000
+        dfnewtrader['numper'] = [int(x)/100 for x in dfnewtrader['numper']]
+        dfnewtrader['volper'] = (dfnewtrader['newvol']/dfnewtrader['allvol'])*10000
+        dfnewtrader['volper'] = [int(x)/100 for x in dfnewtrader['volper']]
         dfnewtrader = dfnewtrader.to_dict(orient='recodes')
+
         return json.dumps({'replay':True,'data':dfnewtrader, 'ToDayNewBie':ToDayNewBie})
 
 def station(username, fromDate, toDate, side):
@@ -333,7 +338,7 @@ def station(username, fromDate, toDate, side):
         fromDate = symbol_db['trade'].find_one(sort=[("Date", -1)])['Date']
     if(toDate==False):
         toDate = symbol_db['trade'].find_one(sort=[("Date", -1)])['Date']
-    dfTrader = pd.DataFrame(symbol_db['trade'].find({ 'Date' : { '$gte' :toDate  , '$lte' :fromDate }}))
+    dfTrader = pd.DataFrame(symbol_db['trade'].find({ 'Date' : { '$gte' :min(int(toDate),int(fromDate))  , '$lte' :max(int(toDate),int(fromDate)) }}))
     if len(dfTrader)==0:
         return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
     else:
@@ -345,8 +350,6 @@ def station(username, fromDate, toDate, side):
         dfistgah['w'] = (dfistgah['Volume'] / dfistgah['Volume'].max()) + 0.1
         for i in dfistgah.index:
             key = dfistgah['Istgah'][i]
-
-            #dfistgah['Istgah'][i] = farasahm_db['broker'].find_one({'TBKEY':' '+(i.replace(' ',''))})['TBNAME']
             try:dfistgah['Istgah'][i] = farasahm_db['broker'].find_one({'TBKEY':' '+(key.replace(' ',''))})['TBNAME']
             except:dfistgah['Istgah'][i] = 'نامعلوم'
         dfistgah = dfistgah.to_dict(orient='records')
@@ -404,7 +407,7 @@ def sediment(username,period):
     dftrade = pd.DataFrame(symbol_db['trade'].find())
     maxDate = dftrade['Date'].max()
     onPriod = onPeriodDate(maxDate,int(period))
-    outTrader = list(set(list(set(dftrade[dftrade['Date']>onPriod]['S_account']))+list(set(dftrade[dftrade['Date']>onPriod]['B_account']))))
+    outTrader = list(set(dftrade[dftrade['Date']>onPriod]['S_account'])) # list(set(list(set(dftrade[dftrade['Date']>onPriod]['S_account']))+list(set(dftrade[dftrade['Date']>onPriod]['B_account']))))
     DfOnPriod = dftrade[dftrade['Date']<=onPriod]
     if len(DfOnPriod)<=0:
         return json.dumps({'replay':False, 'msg':'اطلاعاتی موجود نیست'})
@@ -453,11 +456,21 @@ def detailes(username, account, fromDate, toDate):
     dftrader = dftrader[['Volume','Price','B_account','S_account','Date','Time']]
 
     dftrader = dftrader.sort_values(by=['Date','Time'], ascending=[True,True]).reset_index()
+    avgprcb = dftrader[dftrader['B_account']==account]
+    avgprcb['value'] = (avgprcb['Volume'] * avgprcb['Price']) 
+    avgprcb = avgprcb['value'].sum() / avgprcb['Volume'].sum()
+    avgprcs = dftrader[dftrader['S_account']==account]
+    avgprcs['value'] = (avgprcs['Volume'] * avgprcs['Price']) 
+    avgprcs = avgprcs['value'].sum() / avgprcs['Volume'].sum()
     dftrader['B_account'] = [CodeToName(x, symbol) for x in dftrader['B_account']]
     dftrader['S_account'] = [CodeToName(x, symbol) for x in dftrader['S_account']]
     dftrader['Date'] = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in dftrader['Date']]
+    balance = pd.DataFrame(symbol_db['balance'].find({'Account':account}))
+    balance = balance[balance['Date']==balance['Date'].max()]
+    balance = balance['Saham'][balance.index.max()]
+    shortData = {'vol':int(balance), 'avgprcb':int(avgprcb), 'avgprcs': int(avgprcs)}
     dftrader = dftrader.to_dict(orient='records')
-    return json.dumps({'replay':True, 'data':dftrader})
+    return json.dumps({'replay':True, 'data':dftrader, 'shortData':shortData})
 
 '''
 username='test1'

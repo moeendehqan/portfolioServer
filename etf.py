@@ -107,6 +107,7 @@ def etf_return(username,onDate,target):
         df['60'] = (df['final_price']/df['final_price'].shift(60))-1
         df['180'] = (df['final_price']/df['final_price'].shift(180))-1
         df['365'] = (df['final_price']/df['final_price'].shift(365))-1
+        df['730'] = (df['final_price']/df['final_price'].shift(730))-1
         if onDate==False:
             df = df[df.index==df.index.max()]
         else:
@@ -117,10 +118,10 @@ def etf_return(username,onDate,target):
         del dic['index']
         del dic["final_price"]
         df = pd.DataFrame(dic.items(),columns=['period','ptp'])
-        df['periodint'] = [365/1, 365/7, 365/14, 365/30, 365/60, 365/180, 365/365]
+        df['periodint'] = [365/1, 365/7, 365/14, 365/30, 365/60, 365/180, 365/365, 365/730]
         df['yearly'] = round(((((df['ptp']+1)**df['periodint'])-1)*100),2)
         df['ptp'] = [round((x*100),2) for x in df['ptp']]
-        df['diff'] = df['yearly'] - int(target)
+        df['diff'] = df['yearly'] - float(target)
     return jsonify({'replay':True,'data':df.to_json(orient='records')})
 
 def etf_reserve(username, fromDate, toDate, etfSelect):
