@@ -1,5 +1,6 @@
 from ntpath import join
 from h11 import Data
+from matplotlib.pyplot import axes
 import numpy as np
 import pymongo
 import json
@@ -86,7 +87,7 @@ def etf_volume(username,fromDate,toDate):
     return df.to_json(orient='records')
 
 
-def etf_return(username,onDate,target):
+def etf_return(username,onDate,target,periodList):
     symbol = getSymbolOfUsername(username)
     psPeriod = list(farasahm_db['etflist'].find({'نماد':symbol}))[0][' دوره تقسیم سود ']
     if psPeriod=='ندارد':
@@ -99,15 +100,9 @@ def etf_return(username,onDate,target):
         df['final_price'] = df['final_price'].fillna(method='ffill')
         df = df.dropna()
         df = df.reset_index()
-        print(df)
-        df['1'] = (df['final_price']/df['final_price'].shift(1))-1
-        df['7'] = (df['final_price']/df['final_price'].shift(7))-1
-        df['14'] = (df['final_price']/df['final_price'].shift(14))-1
-        df['30'] = (df['final_price']/df['final_price'].shift(30))-1
-        df['60'] = (df['final_price']/df['final_price'].shift(60))-1
-        df['180'] = (df['final_price']/df['final_price'].shift(180))-1
-        df['365'] = (df['final_price']/df['final_price'].shift(365))-1
-        df['730'] = (df['final_price']/df['final_price'].shift(730))-1
+        print(periodList)
+        for i in periodList:
+            df[f'{i}'] = (df['final_price']/df['final_price'].shift(int(i)))-1
         if onDate==False:
             df = df[df.index==df.index.max()]
         else:
@@ -118,10 +113,40 @@ def etf_return(username,onDate,target):
         del dic['index']
         del dic["final_price"]
         df = pd.DataFrame(dic.items(),columns=['period','ptp'])
-        df['periodint'] = [365/1, 365/7, 365/14, 365/30, 365/60, 365/180, 365/365, 365/730]
+        df['periodint'] = [365/int(x) for x in periodList]
         df['yearly'] = round(((((df['ptp']+1)**df['periodint'])-1)*100),2)
         df['ptp'] = [round((x*100),2) for x in df['ptp']]
         df['diff'] = df['yearly'] - float(target)
+    else:
+        df = pd.DataFrame(etf_db[f'{symbol}_collection'].find({},{ 'dateInt':1, '_id':0,'close_price_change_percent':1})).set_index('dateInt')
+        day_list = Day_list()
+        day_list =  filter(lambda x: x >= df.index.min(), day_list)
+        day_list =  filter(lambda x: x <= df.index.max(), day_list)
+        df = df.join(pd.DataFrame(index=day_list), how='right')
+        df = df.sort_index(ascending=True)
+        df = df.where(df>0,0)
+        df['close_price_change_percent'] = (df['close_price_change_percent']/100)+1
+        if onDate==False:
+            df = df[df.index<=df.index.max()]
+        else:
+            df = df[df['index']<=int(onDate)]
+            if len(df)==0:
+                return json.dumps({'replay':False, 'msg':'اطلاعاتی موجود نیست'})
+        df = df.reset_index()
+        dic ={}
+        for i in periodList:
+            d = list(df[df.index>df.index.max()-i]['close_price_change_percent'])
+            if len(d)==i:
+                r = (np.prod(d))**(365/i)
+                dic[f'{i}'] = [int((np.prod(d)-1)*10000)/100, np.nan, int((r-1)*10000)/100, round((int((r-1)*10000)/100)-target,2)]
+            else:
+                dic[f'{i}'] = [np.nan, np.nan, np.nan, np.nan]
+        df = pd.DataFrame.from_dict(dic,orient='index')
+        df = df.reset_index()
+        df.columns = ['period','ptp','periodint','yearly','diff']
+    
+    print(df)
+
     return jsonify({'replay':True,'data':df.to_json(orient='records')})
 
 def etf_reserve(username, fromDate, toDate, etfSelect):
@@ -178,3 +203,77 @@ def etf_dashboard(username):
     lastDay = etf_db[f'{symbol}_collection'].find_one(sort=[("dateInt", -1)])
     del lastDay['_id']
     return json.dumps(lastDay)
+
+def etf_allreturn(username, onDate, etfSelect):
+    periodList = [1,14,30,90,180,365]
+    symbol = getSymbolOfUsername(username)
+    psPeriod = list(farasahm_db['etflist'].find({'نماد':symbol}))[0][' دوره تقسیم سود ']
+    etfSelect.append(symbol)
+    etfSelect = list(set(etfSelect))
+    dff = pd.DataFrame()
+    for i in etfSelect:
+        psPeriod = list(farasahm_db['etflist'].find({'نماد':i}))[0][' دوره تقسیم سود ']
+        if psPeriod=='ندارد':
+            df = pd.DataFrame(etf_db[f'{i}_collection'].find({},{ 'dateInt':1, '_id':0,'final_price':1})).set_index('dateInt')
+            day_list = Day_list()
+            day_list =  filter(lambda x: x >= df.index.min(), day_list)
+            day_list =  filter(lambda x: x <= df.index.max(), day_list)
+            df = df.join(pd.DataFrame(index=day_list), how='right')
+            df = df.sort_index(ascending=True)
+            df['final_price'] = df['final_price'].fillna(method='ffill')
+            df = df.dropna()
+            df = df.reset_index()
+
+            for j in periodList:
+                df[f'{j}'] = (df['final_price']/df['final_price'].shift(int(j)))-1
+            if onDate==False:
+                df = df[df.index==df.index.max()]
+            else:
+                df = df[df['index']==int(onDate)]
+            if len(df)>0:
+                dic = df.to_dict(orient='records')[0]
+                del dic['index']
+                del dic["final_price"]
+                df = pd.DataFrame(dic.items(),columns=['period','ptp'])
+                df['periodint'] = [365/int(x) for x in periodList]
+                df['yearly'] = round(((((df['ptp']+1)**df['periodint'])-1)*100),2)
+                df['ptp'] = [round((x*100),2) for x in df['ptp']]
+                df = df[['period','yearly']]
+                df = pd.pivot_table(df,columns='period')
+                df.index = [i.replace(' ','')]
+                dff = dff.append(df)
+        else:
+            df = pd.DataFrame(etf_db[f'{i}_collection'].find({},{ 'dateInt':1, '_id':0,'close_price_change_percent':1})).set_index('dateInt')
+            day_list = Day_list()
+            day_list =  filter(lambda x: x >= df.index.min(), day_list)
+            day_list =  filter(lambda x: x <= df.index.max(), day_list)
+            df = df.join(pd.DataFrame(index=day_list), how='right')
+            df = df.sort_index(ascending=True)
+            df = df.where(df>0,0)
+            df['close_price_change_percent'] = (df['close_price_change_percent']/100)+1
+            if onDate==False:
+                df = df[df.index<=df.index.max()]
+            else:
+                df = df[df['index']<=int(onDate)]
+                if len(df)==0:
+                    return json.dumps({'replay':False, 'msg':'اطلاعاتی موجود نیست'})
+            df = df.reset_index()
+            dic ={}
+            for j in periodList:
+                d = list(df[df.index>df.index.max()-j]['close_price_change_percent'])
+                if len(d)==j:
+                    r = (np.prod(d))**(365/j)
+                    dic[f'{j}'] = [int((np.prod(d)-1)*10000)/100, np.nan, int((r-1)*10000)/100, round((int((r-1)*10000)/100)-target,2)]
+                else:
+                    dic[f'{j}'] = [np.nan, np.nan, np.nan, np.nan]
+            df = pd.DataFrame.from_dict(dic,orient='index')
+            df = df.reset_index()
+            df.columns = ['period','ptp','periodint','yearly']
+            print(df)
+
+    if len(dff)==0:
+        return json.dumps({'replay':False, 'msg':'اطلاعاتی موجود نیست'})
+    else:
+        dff = dff.reset_index()
+        dff = dff.to_dict(orient='records')
+        return json.dumps({'replay':True, 'data':dff})
