@@ -162,7 +162,7 @@ def etf_volume():
 @app.route('/etf/return',methods = ['POST', 'GET'])
 def etf_return():
     data = request.get_json()
-    return etf.etf_return(data['username'],data['onDate'],data['target'])
+    return etf.etf_return(data['username'],data['onDate'],data['target'], data['periodList'])
 
 @app.route('/etf/reserve',methods = ['POST', 'GET'])
 def etf_reserve():
@@ -176,6 +176,10 @@ def etf_etflist():
     return etf.etf_etflist(data['username'])
 
 
+@app.route('/etf/allreturn',methods = ['POST', 'GET'])
+def etf_allreturn():
+    data = request.get_json()
+    return etf.etf_allreturn(data['username'],data['onDate'],data['etfSelectm'])
 
 
 
