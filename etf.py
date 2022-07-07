@@ -239,6 +239,7 @@ def etf_allreturn(username, onDate, etfSelect):
                 df['yearly'] = round(((((df['ptp']+1)**df['periodint'])-1)*100),2)
                 df['ptp'] = [round((x*100),2) for x in df['ptp']]
                 df = df[['period','yearly']]
+
                 df = pd.pivot_table(df,columns='period')
                 df.index = [i.replace(' ','')]
                 dff = dff.append(df)
@@ -263,13 +264,17 @@ def etf_allreturn(username, onDate, etfSelect):
                 d = list(df[df.index>df.index.max()-j]['close_price_change_percent'])
                 if len(d)==j:
                     r = (np.prod(d))**(365/j)
-                    dic[f'{j}'] = [int((np.prod(d)-1)*10000)/100, np.nan, int((r-1)*10000)/100, round((int((r-1)*10000)/100)-target,2)]
+                    dic[f'{j}'] = [int((np.prod(d)-1)*10000)/100, np.nan, int((r-1)*10000)/100]
                 else:
-                    dic[f'{j}'] = [np.nan, np.nan, np.nan, np.nan]
+                    dic[f'{j}'] = [np.nan, np.nan, np.nan]
             df = pd.DataFrame.from_dict(dic,orient='index')
             df = df.reset_index()
             df.columns = ['period','ptp','periodint','yearly']
+            df = df[['period','yearly']]
+            df = pd.pivot_table(df,columns='period')
             print(df)
+            df.index = [i.replace(' ','')]
+            dff = dff.append(df)
 
     if len(dff)==0:
         return json.dumps({'replay':False, 'msg':'اطلاعاتی موجود نیست'})

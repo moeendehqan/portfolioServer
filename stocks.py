@@ -2,6 +2,7 @@ import time
 import json
 import pandas as pd
 import pymongo
+from pyparsing import col
 from general import *
 import numpy as np
 from numpy import mean
@@ -457,11 +458,18 @@ def detailes(username, account, fromDate, toDate):
 
     dftrader = dftrader.sort_values(by=['Date','Time'], ascending=[True,True]).reset_index()
     avgprcb = dftrader[dftrader['B_account']==account]
-    avgprcb['value'] = (avgprcb['Volume'] * avgprcb['Price']) 
-    avgprcb = avgprcb['value'].sum() / avgprcb['Volume'].sum()
+    if len(avgprcb):
+        avgprcb['value'] = (avgprcb['Volume'] * avgprcb['Price']) 
+        avgprcb = avgprcb['value'].sum() / avgprcb['Volume'].sum()
+    else:
+        avgprcb = 0
+
     avgprcs = dftrader[dftrader['S_account']==account]
-    avgprcs['value'] = (avgprcs['Volume'] * avgprcs['Price']) 
-    avgprcs = avgprcs['value'].sum() / avgprcs['Volume'].sum()
+    if len(avgprcs)>0:
+        avgprcs['value'] = (avgprcs['Volume'] * avgprcs['Price']) 
+        avgprcs = avgprcs['value'].sum() / avgprcs['Volume'].sum()
+    else:
+        avgprcs = 0
     dftrader['B_account'] = [CodeToName(x, symbol) for x in dftrader['B_account']]
     dftrader['S_account'] = [CodeToName(x, symbol) for x in dftrader['S_account']]
     dftrader['Date'] = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in dftrader['Date']]
@@ -482,25 +490,27 @@ trade_collection = symbol_db['trade']
 if(onDate==False):
     fromDate = trade_collection.find_one(sort=[("Date", -1)])['Date']
 
-dfBalance = pd.DataFrame(symbol_db['balance'].find({},{'_id':0,'Volume_B':0,'Volume_S':0}))
-dfBalance = pd.pivot_table(dfBalance,index='date',columns='index',aggfunc=np.sum)
+
+dfBalance = pd.DataFrame(symbol_db['balance'].find({},{'_id':0,'Account':1,'Saham':1,'Date':1}))
+dfBalance = dfBalance.pivot_table(index='Date', columns='Account')
+dfBalance = dfBalance['Saham']
 dfBalance = dfBalance.sort_index()
-dfBalance = dfBalance.Balance
 dfBalance = dfBalance.fillna(method='ffill')
-listColumns = dfBalance.isnull().sum()>(dfBalance.isnull().sum().max()*0.3)
-listColumns = listColumns[listColumns==True]
-listColumns = list(listColumns.index)
-dfBalance = dfBalance.drop(columns=listColumns)
-dfBalance = dfBalance.replace(np.nan, 0)
-dfBalance = (dfBalance / dfBalance.shift(-1))-1
-print(dfBalance)
-corr = dfBalance.corr(method='pearson')
-
-findList= []
-for i in corr.columns:
-    print(i)
-    op = corr.index[corr[i]>0.9].tolist()
-    dic = {'i':op}
-    findList.append(dic)
-
-print(findList)'''
+miss = dfBalance.isnull().sum()
+miss = miss>miss.mean()
+miss = miss[miss==True]
+dfBalance = dfBalance.drop(columns=miss.index)
+dfBalance = dfBalance.fillna(0)
+miss = dfBalance.std()
+miss = miss<miss.mean()/5
+miss = miss[miss==True]
+dfBalance = dfBalance.drop(columns=miss.index)
+dfBalance = dfBalance.corr(method='pearson')
+f = []
+for c in dfBalance.columns:
+    dfBalance[c][c] = 0
+    re = dfBalance[c]
+    re = re.sort_values()
+    re = re[3:]
+    print(re)
+'''
