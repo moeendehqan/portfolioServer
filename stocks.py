@@ -221,7 +221,44 @@ def unavailable(username):
     listDate = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in listDate]
     return({'listDate':listDate,'count':len(listDate)})
 
+def tradersDatat(username, fromDate, toDate, side):
+    symbol = getSymbolOfUsername(username)
+    symbol_db = client[f'{symbol}_db']
+    trade_collection = symbol_db['trade']
+    if(fromDate==False):
+        fromDate = trade_collection.find_one(sort=[("Date", -1)])['Date']
+    if(toDate==False):
+        toDate = trade_collection.find_one(sort=[("Date", -1)])['Date']
+    dftrade = pd.DataFrame(trade_collection.find({ 'Date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
+    dfbalance = pd.DataFrame(symbol_db['balance'].find({'Date':max(toDate,fromDate)}))
+    if len(dftrade)<=0:
+        return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
+
+    dftrade['Value'] = dftrade['Volume'] * dftrade['Price']
+    dfBuy = dftrade.groupby(by=['B_account']).sum()[['Volume','Value']]
+    dfSel = dftrade.groupby(by=['S_account']).sum()[['Volume','Value']]
+    dfBuy['price'] = round(dfBuy['Value']/dfBuy['Volume'],0)
+    dfSel['price'] = round(dfSel['Value']/dfSel['Volume'],0)
+    df = dfBuy.join(dfSel,rsuffix='_buy',lsuffix='_sel',how='outer')
+    dateList = list(set(dftrade['Date']))
+    dateList = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in dateList]
+    finallPrice = []
+    for d in dateList:
+        url = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={getSymbolTseOfUsername(username)}&time={d}'
+        d_ = requests.get(url).json()
+        d_ = int(d_['final_price']) - int(d_['final_price_change'])
+        finallPrice.append(d_)
+    finallPrice = sum(finallPrice) / len(finallPrice)
+    df['rate_sel'] = round(((df['price_sel']/finallPrice)-1)*100,2)
+    df['rate_buy'] = round(((df['price_buy']/finallPrice)-1)*100,2)
+    df = df.fillna(0)
+    df['code'] = df.index
+    df.index = [CodeToName(x,symbol) for x in df.index]
+    print(df)
+
+
 def tradersData(username, fromDate, toDate, side):
+    tradersDatat(username, fromDate, toDate, side)
     symbol = getSymbolOfUsername(username)
     symbol_db = client[f'{symbol}_db']
     trade_collection = symbol_db['trade']
@@ -231,8 +268,10 @@ def tradersData(username, fromDate, toDate, side):
         toDate = trade_collection.find_one(sort=[("Date", -1)])['Date']
     if side=='buy':
         side = 'B_account'
+        unSide = 'S_account'
     else:
         side = 'S_account'
+        unSide = 'B_account'
     dftrade = pd.DataFrame(trade_collection.find({ 'Date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
     dfbalance = pd.DataFrame(symbol_db['balance'].find({'Date':max(toDate,fromDate)}))
     if len(dftrade)<=0:
@@ -241,21 +280,21 @@ def tradersData(username, fromDate, toDate, side):
         dftrade['Value'] = dftrade['Volume'] * dftrade['Price']
         dfside = dftrade.groupby(by=[side]).sum()
         dfside = dfside[['Volume','Value']]
-        dfside['Price'] = dfside['Value']/dfside['Volume']
+        dfside['PriceSide'] = dfside['Value']/dfside['Volume']
         dfside['code'] = dfside.index
         dfside.index = [CodeToName(x,symbol) for x in dfside.index]
         dfside = dfside.reset_index()
         dfside = dfside.reset_index()
-        dfside.columns = ['id','name','volume','value','price','code']
+        dfside.columns = ['id','name','volume','value','PriceSide','code']
         dffinall = pd.DataFrame()
         dffinall['value'] = dfside['value']
-        dffinall['price'] = dfside['price']
+        dffinall['PriceSide'] = dfside['PriceSide']
         dffinall['volume'] = dfside['volume']
         dffinall['name'] = dfside['name']
         dffinall['id'] = dfside['id']
         dffinall['code'] = dfside['code']
         dffinall['w'] = (dffinall['volume']/dffinall['volume'].max())+0.1
-        dffinall['price'] = [round(x) for x in dffinall['price']]
+        dffinall['PriceSide'] = [round(x) for x in dffinall['PriceSide']]
         dffinall['balance'] = '-'
         for i in dffinall.index:
             balance = dfbalance[dfbalance['Account']==dffinall['code'][i]]
