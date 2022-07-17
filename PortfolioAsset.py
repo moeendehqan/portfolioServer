@@ -1,7 +1,5 @@
-from asyncio.windows_events import NULL
-from cmath import nan
+
 import json
-from matplotlib.style import available
 import pandas as pd
 import pymongo
 from general import *
@@ -9,7 +7,7 @@ import numpy as np
 
 
 client = pymongo.MongoClient()
-portfolio = client['farasahm']
+portfolio = client['portfolio']
 
 
 def uploadTradFile(file,username):
@@ -18,6 +16,7 @@ def uploadTradFile(file,username):
     file: فایل آپلود شده در فرانت به با فرمت اکسلی
     username: نام کاربری که اقدام به بارگذاری کرده
     '''
+    print(file)
     inp = pd.read_excel(file)
     requisiteColumns = ['تاریخ معامله','نوع معامله','کد بورسی','شناسه ملی','عنوان مشتری','نام شعبه','نام شعبه مشتری','نماد','نماد سپرده گذاری','تعداد','قیمت','ارزش معامله','گروه مشتری']
     checkRequisiteColumns = len([x for x in requisiteColumns if x in inp.columns]) == 13

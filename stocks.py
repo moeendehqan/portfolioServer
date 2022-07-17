@@ -2,7 +2,6 @@ import time
 import json
 import pandas as pd
 import pymongo
-from pyparsing import col
 from general import *
 import numpy as np
 from numpy import mean
@@ -26,7 +25,20 @@ def is_register_file(df):
 def is_trade_file(df):
     standard_culomns = ['Symbol','Date','Time','Volume','Price','Buy_brkr','Sel_brkr','Ticket_no','Cancel','B_account','S_account']
     return collections.Counter(list(df.columns)) == collections.Counter(standard_culomns)
-    
+
+def CodeToNameFast(listcode, symbol):
+    symbol_db = client[f'{symbol}_db']
+    register_collection = pd.DataFrame(symbol_db['register'].find({},{'_id':0, 'Account':1, 'Fullname':1}))
+    register_collection = register_collection.set_index('Account')
+    listname = []
+    for code in listcode:
+        if code in register_collection.index:
+            fullname = register_collection['Fullname'][code]
+            listname.append(fullname)
+        else:
+            listname.append(code)
+    return listname
+
 def CodeToName(code, symbol):
     symbol_db = client[f'{symbol}_db']
     register_collection = symbol_db['register']
@@ -34,10 +46,8 @@ def CodeToName(code, symbol):
     if len(name)>0:
         name = name['Fullname'][name.index.max()]
     else:
-
         name = code
     name = name.replace('(سهامی‌خاص)','')
-
     return name
 
 def getSymbolOfUsername(userName):
@@ -459,7 +469,7 @@ def detailes(username, account, fromDate, toDate):
     dftrader = dftrader.sort_values(by=['Date','Time'], ascending=[True,True]).reset_index()
     avgprcb = dftrader[dftrader['B_account']==account]
     if len(avgprcb):
-        avgprcb['value'] = (avgprcb['Volume'] * avgprcb['Price']) 
+        avgprcb['value'] = avgprcb['Volume'] * avgprcb['Price']
         avgprcb = avgprcb['value'].sum() / avgprcb['Volume'].sum()
     else:
         avgprcb = 0
@@ -470,14 +480,15 @@ def detailes(username, account, fromDate, toDate):
         avgprcs = avgprcs['value'].sum() / avgprcs['Volume'].sum()
     else:
         avgprcs = 0
-    dftrader['B_account'] = [CodeToName(x, symbol) for x in dftrader['B_account']]
-    dftrader['S_account'] = [CodeToName(x, symbol) for x in dftrader['S_account']]
+    dftrader['B_account'] = CodeToNameFast(list(dftrader['B_account']), symbol)
+    dftrader['S_account'] = CodeToNameFast(list(dftrader['S_account']), symbol)
     dftrader['Date'] = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in dftrader['Date']]
     balance = pd.DataFrame(symbol_db['balance'].find({'Account':account}))
     balance = balance[balance['Date']==balance['Date'].max()]
     balance = balance['Saham'][balance.index.max()]
     shortData = {'vol':int(balance), 'avgprcb':int(avgprcb), 'avgprcs': int(avgprcs)}
     dftrader = dftrader.to_dict(orient='records')
+    print(dftrader)
     return json.dumps({'replay':True, 'data':dftrader, 'shortData':shortData})
 
 '''

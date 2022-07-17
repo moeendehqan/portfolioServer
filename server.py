@@ -3,7 +3,7 @@ import etf
 from flask import Flask, request
 import json
 from flask_cors import CORS
-from matplotlib.pyplot import get
+
 import pymongo
 from timeir import *
 import pandas as pd
@@ -186,10 +186,10 @@ def etf_allreturn():
 
 
 
-@app.route('/portfoli/update',methods = ['POST', 'GET'])
+@app.route('/portfolio/updatetbs',methods = ['POST', 'GET'])
 def portfoli_update():
     username = request.form.get('username')
-    return uploadTradFile(request.files['filetrade'],username)
+    return uploadTradFile(request.files['TBS'],username)
 
 @app.route('/portfoli/customerupdate',methods = ['POST', 'GET'])
 def portfoli_customerupdate():
