@@ -88,7 +88,7 @@ def stocks_unavailable():
 @app.route('/stocks/traders',methods = ['POST', 'GET'])
 def stocks_traders():
     data = request.get_json()
-    return stocks.tradersData(data['username'], int(data['fromDate']), int(data['toDate']), data['side'])
+    return stocks.tradersData(data['username'], int(data['fromDate']), int(data['toDate']))
 
 @app.route('/stocks/infocode',methods = ['POST', 'GET'])
 def stocks_infocode():

@@ -221,7 +221,7 @@ def unavailable(username):
     listDate = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in listDate]
     return({'listDate':listDate,'count':len(listDate)})
 
-def tradersDatat(username, fromDate, toDate, side):
+def tradersData(username, fromDate, toDate):
     symbol = getSymbolOfUsername(username)
     symbol_db = client[f'{symbol}_db']
     trade_collection = symbol_db['trade']
@@ -249,60 +249,14 @@ def tradersDatat(username, fromDate, toDate, side):
         d_ = int(d_['final_price']) - int(d_['final_price_change'])
         finallPrice.append(d_)
     finallPrice = sum(finallPrice) / len(finallPrice)
-    df['rate_sel'] = round(((df['price_sel']/finallPrice)-1)*100,2)
-    df['rate_buy'] = round(((df['price_buy']/finallPrice)-1)*100,2)
+
     df = df.fillna(0)
     df['code'] = df.index
-    df.index = [CodeToName(x,symbol) for x in df.index]
-    print(df)
+    df['name'] = [CodeToName(x,symbol) for x in df.index]
+    dfbalance = dfbalance.set_index('Account')[['Saham']]
+    df = df.join(dfbalance,how='left')
+    return json.dumps({'replay':True, 'data':{'table':df.to_dict(orient='record'), 'finallPrice':finallPrice}})
 
-
-def tradersData(username, fromDate, toDate, side):
-    tradersDatat(username, fromDate, toDate, side)
-    symbol = getSymbolOfUsername(username)
-    symbol_db = client[f'{symbol}_db']
-    trade_collection = symbol_db['trade']
-    if(fromDate==False):
-        fromDate = trade_collection.find_one(sort=[("Date", -1)])['Date']
-    if(toDate==False):
-        toDate = trade_collection.find_one(sort=[("Date", -1)])['Date']
-    if side=='buy':
-        side = 'B_account'
-        unSide = 'S_account'
-    else:
-        side = 'S_account'
-        unSide = 'B_account'
-    dftrade = pd.DataFrame(trade_collection.find({ 'Date' : { '$gte' :  min(toDate,fromDate), '$lte' : max(toDate,fromDate)}}))
-    dfbalance = pd.DataFrame(symbol_db['balance'].find({'Date':max(toDate,fromDate)}))
-    if len(dftrade)<=0:
-        return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
-    else:
-        dftrade['Value'] = dftrade['Volume'] * dftrade['Price']
-        dfside = dftrade.groupby(by=[side]).sum()
-        dfside = dfside[['Volume','Value']]
-        dfside['PriceSide'] = dfside['Value']/dfside['Volume']
-        dfside['code'] = dfside.index
-        dfside.index = [CodeToName(x,symbol) for x in dfside.index]
-        dfside = dfside.reset_index()
-        dfside = dfside.reset_index()
-        dfside.columns = ['id','name','volume','value','PriceSide','code']
-        dffinall = pd.DataFrame()
-        dffinall['value'] = dfside['value']
-        dffinall['PriceSide'] = dfside['PriceSide']
-        dffinall['volume'] = dfside['volume']
-        dffinall['name'] = dfside['name']
-        dffinall['id'] = dfside['id']
-        dffinall['code'] = dfside['code']
-        dffinall['w'] = (dffinall['volume']/dffinall['volume'].max())+0.1
-        dffinall['PriceSide'] = [round(x) for x in dffinall['PriceSide']]
-        dffinall['balance'] = '-'
-        for i in dffinall.index:
-            balance = dfbalance[dfbalance['Account']==dffinall['code'][i]]
-            balance = balance['Saham'][balance.index.max()]
-            dffinall['balance'].iloc[i] = balance
-        dffinall = dffinall.sort_values(by='volume',ascending=False)
-        dffinall = dffinall.to_dict('records')
-        return json.dumps({'replay':True, 'data':dffinall})
 
 def infocode(username, code):
     symbol = getSymbolOfUsername(username)
@@ -354,13 +308,13 @@ def newbie(username, fromDate, toDate):
         return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
     else:
         alldate = list(set(dftrade['Date'].to_list()))
-        dfnewtrader = pd.DataFrame(columns=['Date','newvol','newnum','allvol','allnum'])
+        dfnewtrader = pd.DataFrame(columns=['Date','newvol','newnum','newmax','newmin', 'allvol', 'allnum', 'allmax', 'allmin'])
         for i in alldate:
             dfTraderp = dftrade[dftrade['Date']<i]
             dfTraderl = dftrade[dftrade['Date']==i]
             allgrp = dfTraderl.groupby(by=['B_account']).sum()
             if len(dfTraderp)==0:
-                dfnewtrader = dfnewtrader.append({'Date':i, 'newvol':0, 'newnum':0, 'allvol':allgrp['Volume'].sum(), 'allnum':len(allgrp['Volume'])}, ignore_index=True)
+                dfnewtrader = dfnewtrader.append({'Date':i, 'newvol':0, 'newnum':0,'newmax':0, 'newmin':0, 'allvol':allgrp['Volume'].sum(), 'allnum':len(allgrp['Volume']), 'allmax':allgrp['Volume'].max(), 'allmin':allgrp['Volume'].min()}, ignore_index=True)
             else:
                 alloldcode = set(dfTraderp['B_account'])
                 dfTraderl['new'] = dfTraderl['B_account'].map( lambda x: 'old' if x in alloldcode else 'new')
@@ -368,17 +322,19 @@ def newbie(username, fromDate, toDate):
                 newnew = dfTraderl.groupby(by=['B_account']).sum()
                 newvolume = newnew['Volume'].sum()
                 newnum = len(newnew['Volume'])
-                dfnewtrader = dfnewtrader.append({'Date':i, 'newvol':newvolume, 'newnum':newnum , 'allvol':allgrp['Volume'].sum(), 'allnum':len(allgrp['Volume'])}, ignore_index=True)
+                newmax = newnew['Volume'].max()
+                newmin = newnew['Volume'].min()
+                dfnewtrader = dfnewtrader.append({'Date':i, 'newvol':newvolume, 'newnum':newnum, 'newmax':newmax, 'newmin':newmin, 'allvol':allgrp['Volume'].sum(), 'allnum':len(allgrp['Volume']), 'allmax':allgrp['Volume'].max(), 'allmin':allgrp['Volume'].min()}, ignore_index=True)
         dfnewtrader = dfnewtrader.sort_values(by=['Date'] ,ascending=False).reset_index().drop(columns=['index'])
         ToDayNewBie = dfnewtrader[dfnewtrader['Date']==dfnewtrader['Date'].max()]
-        ToDayNewBie = ToDayNewBie.to_dict(orient='recodes')
+        ToDayNewBie = ToDayNewBie.to_dict(orient='recodes')[0]
         dfnewtrader['Date'] = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in dfnewtrader['Date']]
         dfnewtrader['numper'] =(dfnewtrader['newnum']/dfnewtrader['allnum'])*10000
         dfnewtrader['numper'] = [int(x)/100 for x in dfnewtrader['numper']]
         dfnewtrader['volper'] = (dfnewtrader['newvol']/dfnewtrader['allvol'])*10000
         dfnewtrader['volper'] = [int(x)/100 for x in dfnewtrader['volper']]
-        dfnewtrader = dfnewtrader.to_dict(orient='recodes')
-
+        dfnewtrader = dfnewtrader.to_json(orient='records')
+        print(ToDayNewBie)
         return json.dumps({'replay':True,'data':dfnewtrader, 'ToDayNewBie':ToDayNewBie})
 
 def station(username, fromDate, toDate, side):
