@@ -233,14 +233,12 @@ def tradersData(username, fromDate, toDate):
     dfbalance = pd.DataFrame(symbol_db['balance'].find({'Date':max(toDate,fromDate)}))
     if len(dftrade)<=0:
         return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
-
     dftrade['Value'] = dftrade['Volume'] * dftrade['Price']
-    print(dftrade)
     dfBuy = dftrade.groupby(by=['B_account']).sum()[['Volume','Value']]
     dfSel = dftrade.groupby(by=['S_account']).sum()[['Volume','Value']]
     dfBuy['price'] = round(dfBuy['Value']/dfBuy['Volume'],0)
     dfSel['price'] = round(dfSel['Value']/dfSel['Volume'],0)
-    df = dfBuy.join(dfSel,rsuffix='_buy',lsuffix='_sel',how='outer')
+    df = dfBuy.join(dfSel,rsuffix='_sel',lsuffix='_buy',how='outer')
     dateList = list(set(dftrade['Date']))
     dateList = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in dateList]
     finallPrice = []
@@ -250,12 +248,20 @@ def tradersData(username, fromDate, toDate):
         d_ = int(d_['final_price']) - int(d_['final_price_change'])
         finallPrice.append(d_)
     finallPrice = sum(finallPrice) / len(finallPrice)
-
     df = df.fillna(0)
     df['code'] = df.index
     df['name'] = [CodeToName(x,symbol) for x in df.index]
+    df['brk'] ='نامشخص'
+    for i in df.index:
+        if df['Value_sel'][i]<df['Value_buy'][i]: brkcode = list(dftrade[dftrade['B_account']==i]['Buy_brkr'])[0]
+        else: brkcode = list(dftrade[dftrade['S_account']==i]['Sel_brkr'])[0]
+        print(brkcode)
+        brkname = farasahm_db['broker'].find_one({'TBKEY':brkcode},{'TBNAME':1,'_id':0})
+        if brkname!=None: df['brk'][i]=(brkname['TBNAME'])
+
     dfbalance = dfbalance.set_index('Account')[['Saham']]
     df = df.join(dfbalance,how='left')
+    df = df.sort_values(by=['Volume_buy','Volume_sel'],ascending=False)
     return json.dumps({'replay':True, 'data':{'table':df.to_dict(orient='record'), 'finallPrice':finallPrice}})
 
 
@@ -334,6 +340,7 @@ def newbie(username, fromDate, toDate):
         dfnewtrader['numper'] = [int(x)/100 for x in dfnewtrader['numper']]
         dfnewtrader['volper'] = (dfnewtrader['newvol']/dfnewtrader['allvol'])*10000
         dfnewtrader['volper'] = [int(x)/100 for x in dfnewtrader['volper']]
+        dfnewtrader['sarane'] = dfnewtrader['newvol'] / dfnewtrader['newnum']
         dfnewtrader = dfnewtrader.to_json(orient='records')
         return json.dumps({'replay':True,'data':dfnewtrader, 'ToDayNewBie':ToDayNewBie})
 
