@@ -235,6 +235,7 @@ def tradersData(username, fromDate, toDate):
         return json.dumps({'replay':False, 'msg':'معاملات یافت نشد'})
 
     dftrade['Value'] = dftrade['Volume'] * dftrade['Price']
+    print(dftrade)
     dfBuy = dftrade.groupby(by=['B_account']).sum()[['Volume','Value']]
     dfSel = dftrade.groupby(by=['S_account']).sum()[['Volume','Value']]
     dfBuy['price'] = round(dfBuy['Value']/dfBuy['Volume'],0)
@@ -334,7 +335,6 @@ def newbie(username, fromDate, toDate):
         dfnewtrader['volper'] = (dfnewtrader['newvol']/dfnewtrader['allvol'])*10000
         dfnewtrader['volper'] = [int(x)/100 for x in dfnewtrader['volper']]
         dfnewtrader = dfnewtrader.to_json(orient='records')
-        print(ToDayNewBie)
         return json.dumps({'replay':True,'data':dfnewtrader, 'ToDayNewBie':ToDayNewBie})
 
 def station(username, fromDate, toDate, side):
@@ -389,7 +389,22 @@ def tablo(username,date):
     dateStr = str(date)[0:4]+'/'+str(date)[4:6]+'/'+str(date)[6:8]
     req = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={getSymbolTseOfUsername(username)}&time={dateStr}'
     tabloRequest = requests.get(url=req).json()
-    return json.dumps(tabloRequest)
+    req = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&market=indices&date={dateStr}'
+    marketRequest = pd.DataFrame(requests.get(url=req).json())
+    industry_rate = marketRequest[marketRequest['code']==tabloRequest['industry_code']].to_dict(orient='records')[0]['percent']
+    total_rate = marketRequest[marketRequest['name']=='شاخص كل'].to_dict(orient='records')[0]['percent']
+    totalw_rate = marketRequest[marketRequest['name']=='شاخص كل (هم وزن)'].to_dict(orient='records')[0]['percent']
+    total50_rate = marketRequest[marketRequest['name']=='شاخص قيمت 50 شركت'].to_dict(orient='records')[0]['percent']
+    compani_rate = tabloRequest['final_price_change_percent'][:-1]
+    dic = {'rate':{'company':compani_rate, 'industry':industry_rate, 'totalw':totalw_rate, 'total':total_rate, 'total50':total50_rate}}
+    req = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&all&type=0&time={dateStr}'
+    symbol_industry = pd.DataFrame(requests.get(url=req).json())
+    symbol_industry = symbol_industry[symbol_industry['industry_code']==tabloRequest['industry_code']]
+    symbol_industry = symbol_industry[['final_price','final_price_change_percent','trade_volume','name']]
+    symbol_industry['final_price_change_percent'] = [x.replace('%','') for x in symbol_industry['final_price_change_percent']]
+    symbol_industry = symbol_industry.sort_values(by=['trade_volume'])
+    symbol_industry = symbol_industry.to_dict(orient='records')
+    return json.dumps({'tablo':tabloRequest, 'ind':dic, 'symbol_industry':symbol_industry})
 
 
 def dataupdate(username):
@@ -483,7 +498,6 @@ def detailes(username, account, fromDate, toDate):
     balance = balance['Saham'][balance.index.max()]
     shortData = {'vol':int(balance), 'avgprcb':int(avgprcb), 'avgprcs': int(avgprcs)}
     dftrader = dftrader.to_dict(orient='records')
-    print(dftrader)
     return json.dumps({'replay':True, 'data':dftrader, 'shortData':shortData})
 
 '''
