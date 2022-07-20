@@ -340,7 +340,7 @@ def newbie(username, fromDate, toDate):
         dfnewtrader['numper'] = [int(x)/100 for x in dfnewtrader['numper']]
         dfnewtrader['volper'] = (dfnewtrader['newvol']/dfnewtrader['allvol'])*10000
         dfnewtrader['volper'] = [int(x)/100 for x in dfnewtrader['volper']]
-        dfnewtrader['sarane'] = dfnewtrader['newvol'] / dfnewtrader['newnum']
+        dfnewtrader['sarane'] = dfnewtrader['newvol'] / dfnewtrader['newnum'].replace(0,1)
         dfnewtrader = dfnewtrader.to_json(orient='records')
         return json.dumps({'replay':True,'data':dfnewtrader, 'ToDayNewBie':ToDayNewBie})
 
