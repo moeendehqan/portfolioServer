@@ -7,7 +7,7 @@ from flask_cors import CORS
 import pymongo
 from timeir import *
 import pandas as pd
-from PortfolioAsset import *
+import PortfolioAsset
 
 client = pymongo.MongoClient()
 farasahmDb = client['farasahm']
@@ -184,64 +184,21 @@ def etf_allreturn():
 
 
 
-
+#---------------------------------portfolio--------------------------------------------
 
 @app.route('/portfolio/updatetbs',methods = ['POST', 'GET'])
 def portfoli_update():
     username = request.form.get('username')
-    return uploadTradFile(request.files['TBS'],username)
+    return PortfolioAsset.uploadTradFile(request.files['TBS'],username)
 
-@app.route('/portfoli/customerupdate',methods = ['POST', 'GET'])
-def portfoli_customerupdate():
+@app.route('/portfolio/investorlist',methods = ['POST', 'GET'])
+def portfoli_investorlist():
     data = request.get_json()
-    username = data['username']
-    return json.dumps(customerNames(username))
+    return PortfolioAsset.investorlist(data['username'])
 
-@app.route('/portfoli/customerreview',methods = ['POST', 'GET'])
-def portfoli_customerreview():
-    data = request.get_json()
-    username = data['username']
-    return json.dumps(customerreview(username))
-
-@app.route('/portfoli/asset',methods = ['POST', 'GET'])
-def portfoli_customerasset():
-    data = request.get_json()
-    username = data['username']
-    customer = data['customer']
-    df = customerasset(username, customer)
-    df = df.reset_index()
-    if len(df)>0:
-        databack = df.to_dict(orient='records')
-        return json.dumps({'replay':True, 'databack':databack, 'msg':''})
-    else:
-        return json.dumps({'replay':False, 'databack':'', 'msg':'دارایی برای نمایش موجود نیست'})
-
-@app.route('/portfoli/profitability',methods = ['POST', 'GET'])
-def portfoli_customerprofitability():
-    data = request.get_json()
-    username = data['username']
-    customer = data['customer']
-    dateselect = data['dateselect']
-    problem = customerprofitability(username,customer,dateselect)
-    print(problem)
-    if problem[0]:
-        return json.dumps({'replay':False, 'msg':'nobuy', 'databack':problem[1]})
-    else:
-        return json.dumps({'replay':True, 'msg':'', "databack":''})
-
-@app.route('/portfoli/getallsymbol',methods = ['POST', 'GET'])
-def portfoli_getallsymbol():
-    databack = getAllSymboll()
-    return json.dumps({'databack':databack})
-
-@app.route('/portfoli/updateform',methods = ['POST', 'GET'])
-def portfoli_updateform():
-    data = request.get_json()
-    updateform(data)
-    return json.dumps({'ok':'ok'})
-
-
-
+@app.route('/portfolio/symbolelist',methods = ['POST', 'GET'])
+def portfoli_symbolelist():
+    return PortfolioAsset.symbolelist()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)
