@@ -59,5 +59,33 @@ def symbolelist():
     url = 'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&all&type=2'
     responset = pd.DataFrame(requests.get(url=url).json())[['name']]
     url = 'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&closed_symbols'
-    responset = responset.append(pd.DataFrame(requests.get(url=url).json())[['name']]).to_dict(orient='record')
+    try:responset = responset.append(pd.DataFrame(requests.get(url=url).json())[['name']]).to_dict(orient='record')
+    except:responset = responset.to_dict(orient='record')
     return json.dumps(responset)
+
+def updatemanual(username,date,invester,side,symbol,price,amunt):
+    try:
+        personal = portfolio[username+'_'+'trad'].find_one({'کد بورسی':invester})
+        lastSymbol = portfolio[username+'_'+'trad'].find_one({'نماد':symbol})
+        if lastSymbol==None: lastSymbol = portfolio[username+'_'+'trad'].find_one({'نماد':symbol+'1'})
+        dic = {'تاریخ معامله':str(date)[0:4]+'/'+str(date)[4:6]+'/'+str(date)[6:8]}
+        if side=='buy': dic['نوع معامله'] = 'خرید'
+        else: dic['نوع معامله'] = 'فروش'
+        dic['کد بورسی'] = invester
+        dic['شناسه ملی'] = personal['شناسه ملی']
+        dic['عنوان مشتری'] = personal['عنوان مشتری']
+        dic['نام شعبه'] = personal['نام شعبه']
+        dic['نام شعبه مشتری'] = personal['نام شعبه مشتری']
+        dic['نام شعبه مشتری'] = personal['نام شعبه مشتری']
+        dic['نماد'] = lastSymbol['نماد']
+        dic['نماد سپرده گذاری'] = lastSymbol['نماد سپرده گذاری']
+        dic['تعداد'] = amunt
+        dic['قیمت'] = price
+        dic['ارزش معامله'] = int(price)*int(amunt)
+        dic['گروه مشتری'] = personal['گروه مشتری']
+        dic['گروه مشتری'] = personal['گروه مشتری']
+        dic['تاریخ معامله عددی'] = date
+        portfolio[username+'_'+'trad'].insert_one(dic)
+        return json.dumps({'replay':True})
+    except:
+        return json.dumps({'replay':False})
