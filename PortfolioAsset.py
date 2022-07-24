@@ -95,25 +95,44 @@ def asset(username, invester, date):
     if len(date)==6:
         assetInvester = assetInvester[assetInvester['تاریخ معامله عددی']<=int(date)]
     assetInvester['تعداد'] =[int(x.replace(',','')) for x in  assetInvester['تعداد']]
-    assetInvester['قیمت'] = [int(x.replace(',','')) for x in  assetInvester['قیمت']]
-    assetInvester = assetInvester.groupby(by=['نوع معامله','نماد']).sum()[['تعداد','قیمت']]
+    assetInvester['ارزش معامله'] = [int(x.replace(',','')) for x in  assetInvester['ارزش معامله']]
+    assetInvester = assetInvester.groupby(by=['نوع معامله','نماد']).sum()[['تعداد','ارزش معامله']]
     assetInvester = assetInvester.reset_index()
     dfB = assetInvester[assetInvester['نوع معامله']=='خرید'].drop(columns='نوع معامله')
     dfS = assetInvester[assetInvester['نوع معامله']=='فروش'].drop(columns='نوع معامله')
     assetInvester = dfB.set_index('نماد').join(dfS.set_index('نماد'), lsuffix='_B', rsuffix='_S', how='outer').reset_index().replace(np.nan,0)
-    assetInvester.columns = ['symbol','AmuntBuy','PriceBuy','AmuntSel','PriceSel']
-    assetInvester['Balance'] = assetInvester['AmuntBuy'] - assetInvester['AmuntSel']
-    assetInvester['ValueBuy'] = assetInvester['AmuntBuy'] * assetInvester['PriceBuy']
-    assetInvester['ValueSel'] = assetInvester['AmuntSel'] * assetInvester['PriceSel']
-    assetInvester['ValueBalance'] = 0
-    for i in assetInvester.index:
-        if assetInvester['Balance'][i]>0:
-            symbol = assetInvester['symbol'][i].replace('1','')
-            url = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={symbol}'
-            infoSymbol = requests.get(url=url).json()['final_price']
-            assetInvester['ValueBalance'][i] = int(infoSymbol) * assetInvester['Balance'][i]
-    noInserTrade = assetInvester[assetInvester['Balance']<0]
-    assetInvester = assetInvester[assetInvester['Balance']>=0]
-    assetInvester['profit'] = (assetInvester['ValueBalance'] + assetInvester['ValueSel']) - assetInvester['ValueBuy']
     print(assetInvester)
-    return json.dumps({'o':'o'})
+    assetInvester.columns = ['symbol','AmuntBuy','ValueBuy','AmuntSel','ValueSel']
+    assetInvester['Balance'] = assetInvester['AmuntBuy'] - assetInvester['AmuntSel']
+    noInserBuy = assetInvester[assetInvester['Balance']<0]
+    noInserBuy = noInserBuy[['symbol','Balance']]
+    noInserBuy['Balance'] = noInserBuy['Balance']*-1
+    noInserBuy = noInserBuy.to_dict(orient='records')
+    assetInvester = assetInvester[assetInvester['Balance']>0]
+    assetInvester['full_name'] = ''
+    assetInvester['inds'] = ''
+    assetInvester['market'] = ''
+    assetInvester['state'] = ''
+    assetInvester['final_price'] = ''
+    print(1)
+    for i in assetInvester.index:
+        symbol = assetInvester['symbol'][i].replace('1','')
+        url = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={symbol}'
+        req = requests.get(url=url).json()
+        assetInvester['full_name'][i] = req['full_name']
+        assetInvester['inds'][i] = req['type']
+        assetInvester['market'][i] = req['market']
+        assetInvester['state'][i] = req['state']
+        assetInvester['final_price'][i] = int(req['final_price'])
+    assetInvester['ValueBalance'] = assetInvester['Balance'] * assetInvester['final_price']
+    assetInvester['PriceBuy'] = round(assetInvester['ValueBuy'] / assetInvester['AmuntBuy'],2)
+    assetInvester['PriceSel'] = round(assetInvester['ValueSel'] / assetInvester['AmuntSel'],2)
+    assetInvester['Profit'] = (assetInvester['ValueSel'] + assetInvester['ValueBalance']) - assetInvester['ValueBuy']
+    assetInvester['ofPortfo'] =(assetInvester['ValueBalance']/assetInvester['ValueBalance'].sum())*100
+    assetInvester = assetInvester.fillna(0)
+    print(assetInvester)
+    assetInvester = assetInvester.to_dict(orient='records')
+    return json.dumps({'replay':True, 'noInserBuy':noInserBuy, 'assetInvester':assetInvester})
+
+
+
