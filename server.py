@@ -204,6 +204,11 @@ def portfoli_symbolelist():
 def portfoli_updatemanual():
     data = request.get_json()
     return PortfolioAsset.updatemanual(data['username'],data['date'],data['invester'],data['side'],data['symbol'],data['price'],data['amunt'])
+
+@app.route('/portfolio/asset',methods = ['POST', 'GET'])
+def portfoli_asset():
+    data = request.get_json()
+    return PortfolioAsset.asset(data['username'],data['invester'],data['date'])
     
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)

@@ -89,3 +89,31 @@ def updatemanual(username,date,invester,side,symbol,price,amunt):
         return json.dumps({'replay':True})
     except:
         return json.dumps({'replay':False})
+
+def asset(username, invester, date):
+    assetInvester = pd.DataFrame(portfolio[username+'_'+'trad'].find({'کد بورسی':invester},{'_id':0}))
+    if len(date)==6:
+        assetInvester = assetInvester[assetInvester['تاریخ معامله عددی']<=int(date)]
+    assetInvester['تعداد'] =[int(x.replace(',','')) for x in  assetInvester['تعداد']]
+    assetInvester['قیمت'] = [int(x.replace(',','')) for x in  assetInvester['قیمت']]
+    assetInvester = assetInvester.groupby(by=['نوع معامله','نماد']).sum()[['تعداد','قیمت']]
+    assetInvester = assetInvester.reset_index()
+    dfB = assetInvester[assetInvester['نوع معامله']=='خرید'].drop(columns='نوع معامله')
+    dfS = assetInvester[assetInvester['نوع معامله']=='فروش'].drop(columns='نوع معامله')
+    assetInvester = dfB.set_index('نماد').join(dfS.set_index('نماد'), lsuffix='_B', rsuffix='_S', how='outer').reset_index().replace(np.nan,0)
+    assetInvester.columns = ['symbol','AmuntBuy','PriceBuy','AmuntSel','PriceSel']
+    assetInvester['Balance'] = assetInvester['AmuntBuy'] - assetInvester['AmuntSel']
+    assetInvester['ValueBuy'] = assetInvester['AmuntBuy'] * assetInvester['PriceBuy']
+    assetInvester['ValueSel'] = assetInvester['AmuntSel'] * assetInvester['PriceSel']
+    assetInvester['ValueBalance'] = 0
+    for i in assetInvester.index:
+        if assetInvester['Balance'][i]>0:
+            symbol = assetInvester['symbol'][i].replace('1','')
+            url = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={symbol}'
+            infoSymbol = requests.get(url=url).json()['final_price']
+            assetInvester['ValueBalance'][i] = int(infoSymbol) * assetInvester['Balance'][i]
+    noInserTrade = assetInvester[assetInvester['Balance']<0]
+    assetInvester = assetInvester[assetInvester['Balance']>=0]
+    assetInvester['profit'] = (assetInvester['ValueBalance'] + assetInvester['ValueSel']) - assetInvester['ValueBuy']
+    print(assetInvester)
+    return json.dumps({'o':'o'})
