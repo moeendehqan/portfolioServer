@@ -209,6 +209,12 @@ def portfoli_updatemanual():
 def portfoli_asset():
     data = request.get_json()
     return PortfolioAsset.asset(data['username'],data['invester'],data['date'])
-    
+
+@app.route('/portfolio/revenue',methods = ['POST', 'GET'])
+def portfoli_revenue():
+    data = request.get_json()
+    return PortfolioAsset.revenue(data['username'],data['invester'],data['date'])
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)

@@ -121,7 +121,6 @@ def asset(username, invester, date):
         symbol = assetInvester['symbol'][i].replace('1','')
         url = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={symbol}'
         req = requests.get(url=url).json()
-        assetInvester['full_name'][i] = req['full_name']
         assetInvester['inds'][i] = req['type']
         assetInvester['market'][i] = req['market']
         assetInvester['state'][i] = req['state']
@@ -150,3 +149,45 @@ def asset(username, invester, date):
 
 
 
+def revenue(username, invester, date):
+    investor_df = pd.DataFrame(portfolio[username+'_'+'trad'].find({'کد بورسی':invester},{'_id':0}))
+    TradeInvester = investor_df
+    name = TradeInvester['عنوان مشتری'][0] #send
+    if len(date)==6:
+        TradeInvester = TradeInvester[TradeInvester['تاریخ معامله عددی']<=int(date)]
+    TradeInvester['تعداد'] =[int(str(x).replace(',','')) for x in  TradeInvester['تعداد']]
+    TradeInvester['ارزش معامله'] = [int(str(x).replace(',','')) for x in  TradeInvester['ارزش معامله']]
+    TradeInvester = TradeInvester.groupby(by=['نوع معامله','نماد']).sum()[['تعداد','ارزش معامله']]
+    TradeInvester = TradeInvester.reset_index()
+    dfB = TradeInvester[TradeInvester['نوع معامله']=='خرید'].drop(columns='نوع معامله')
+    dfS = TradeInvester[TradeInvester['نوع معامله']=='فروش'].drop(columns='نوع معامله')
+    TradeInvester = dfB.set_index('نماد').join(dfS.set_index('نماد'), lsuffix='_B', rsuffix='_S', how='outer').reset_index().replace(np.nan,0)
+    TradeInvester.columns = ['symbol','AmuntBuy','ValueBuy','AmuntSel','ValueSel']
+    TradeInvester['Balance'] = TradeInvester['AmuntBuy'] - TradeInvester['AmuntSel']
+    noInserBuy = TradeInvester[TradeInvester['Balance']<0]
+    noInserBuy = noInserBuy[['symbol','Balance']]
+    noInserBuy['Balance'] = noInserBuy['Balance']*-1
+    noInserBuy = noInserBuy.to_dict(orient='records') #send
+    TradeInvester = TradeInvester[TradeInvester['Balance']>=0]
+    if len(TradeInvester)==0 and len(noInserBuy)>0:return json.dumps({'replay':True, 'noInserBuy':noInserBuy, 'TradeInvester':False, 'indsGroup':False, 'name':name})
+    if len(TradeInvester)==0 and len(noInserBuy)==0:return json.dumps({'replay':True, 'noInserBuy':False, 'TradeInvester':False, 'indsGroup':False, 'name':name})
+    TradeInvester['full_name'] = ''
+    TradeInvester['inds'] = ''
+    TradeInvester['market'] = ''
+    TradeInvester['state'] = ''
+    TradeInvester['final_price'] = ''
+    for i in TradeInvester.index:
+        symbol = TradeInvester['symbol'][i].replace('1','')
+        url = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={symbol}'
+        req = requests.get(url=url).json()
+        TradeInvester['full_name'][i] = req['full_name']
+        TradeInvester['inds'][i] = req['type']
+        TradeInvester['market'][i] = req['market']
+        TradeInvester['state'][i] = req['state']
+        TradeInvester['final_price'][i] = int(req['final_price'])
+    TradeInvester['ValueBalance'] = TradeInvester['Balance'] * TradeInvester['final_price']
+    TradeInvester['PriceBuy'] = round(TradeInvester['ValueBuy'] /TradeInvester['AmuntBuy'])
+    TradeInvester['PriceSel'] = round(TradeInvester['ValueSel'] /TradeInvester['AmuntSel'])
+    print(TradeInvester)
+
+    return json.dumps({'o':'o'})
