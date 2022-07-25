@@ -91,17 +91,18 @@ def updatemanual(username,date,invester,side,symbol,price,amunt):
         return json.dumps({'replay':False})
 
 def asset(username, invester, date):
-    assetInvester = pd.DataFrame(portfolio[username+'_'+'trad'].find({'کد بورسی':invester},{'_id':0}))
+    investor_df = pd.DataFrame(portfolio[username+'_'+'trad'].find({'کد بورسی':invester},{'_id':0}))
+    assetInvester = investor_df
+    name = assetInvester['عنوان مشتری'][0]
     if len(date)==6:
         assetInvester = assetInvester[assetInvester['تاریخ معامله عددی']<=int(date)]
-    assetInvester['تعداد'] =[int(x.replace(',','')) for x in  assetInvester['تعداد']]
-    assetInvester['ارزش معامله'] = [int(x.replace(',','')) for x in  assetInvester['ارزش معامله']]
+    assetInvester['تعداد'] =[int(str(x).replace(',','')) for x in  assetInvester['تعداد']]
+    assetInvester['ارزش معامله'] = [int(str(x).replace(',','')) for x in  assetInvester['ارزش معامله']]
     assetInvester = assetInvester.groupby(by=['نوع معامله','نماد']).sum()[['تعداد','ارزش معامله']]
     assetInvester = assetInvester.reset_index()
     dfB = assetInvester[assetInvester['نوع معامله']=='خرید'].drop(columns='نوع معامله')
     dfS = assetInvester[assetInvester['نوع معامله']=='فروش'].drop(columns='نوع معامله')
     assetInvester = dfB.set_index('نماد').join(dfS.set_index('نماد'), lsuffix='_B', rsuffix='_S', how='outer').reset_index().replace(np.nan,0)
-    print(assetInvester)
     assetInvester.columns = ['symbol','AmuntBuy','ValueBuy','AmuntSel','ValueSel']
     assetInvester['Balance'] = assetInvester['AmuntBuy'] - assetInvester['AmuntSel']
     noInserBuy = assetInvester[assetInvester['Balance']<0]
@@ -109,12 +110,13 @@ def asset(username, invester, date):
     noInserBuy['Balance'] = noInserBuy['Balance']*-1
     noInserBuy = noInserBuy.to_dict(orient='records')
     assetInvester = assetInvester[assetInvester['Balance']>0]
+    if len(assetInvester)==0 and len(noInserBuy)>0:return json.dumps({'replay':True, 'noInserBuy':noInserBuy, 'assetInvester':False, 'indsGroup':False, 'name':name})
+    if len(assetInvester)==0 and len(noInserBuy)==0:return json.dumps({'replay':True, 'noInserBuy':False, 'assetInvester':False, 'indsGroup':False, 'name':name})
     assetInvester['full_name'] = ''
     assetInvester['inds'] = ''
     assetInvester['market'] = ''
     assetInvester['state'] = ''
     assetInvester['final_price'] = ''
-    print(1)
     for i in assetInvester.index:
         symbol = assetInvester['symbol'][i].replace('1','')
         url = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={symbol}'
@@ -125,14 +127,26 @@ def asset(username, invester, date):
         assetInvester['state'][i] = req['state']
         assetInvester['final_price'][i] = int(req['final_price'])
     assetInvester['ValueBalance'] = assetInvester['Balance'] * assetInvester['final_price']
-    assetInvester['PriceBuy'] = round(assetInvester['ValueBuy'] / assetInvester['AmuntBuy'],2)
-    assetInvester['PriceSel'] = round(assetInvester['ValueSel'] / assetInvester['AmuntSel'],2)
-    assetInvester['Profit'] = (assetInvester['ValueSel'] + assetInvester['ValueBalance']) - assetInvester['ValueBuy']
+    assetInvester['PriceBuy'] = 0
+    for i in assetInvester.index:
+        BuySymbol = investor_df[investor_df['نماد']==assetInvester['symbol'][i]]
+        BuySymbol = investor_df[investor_df['نوع معامله']=='خرید'].sort_values(by=['تاریخ معامله عددی','ارزش معامله'],ascending=False)[['تاریخ معامله عددی','تعداد','ارزش معامله']]
+        BuySymbol['CumAmunt'] = BuySymbol['تعداد'].cumsum()
+        BuySymbol['balance'] = assetInvester['Balance'][i]
+        BuySymbol['AB'] = BuySymbol['CumAmunt']<=BuySymbol['balance']
+        BuySymbol['CAB'] = (BuySymbol['AB'].shift()-BuySymbol['AB']).fillna(1)
+        BuySymbol['CAB'] = ((BuySymbol['CAB'] * BuySymbol['AB']) + BuySymbol['CAB'])==1
+        BuySymbol['FullValue'] = BuySymbol['AB'] * BuySymbol['ارزش معامله']
+        BuySymbol['HalfValue'] = (BuySymbol['CAB'] * BuySymbol['ارزش معامله'])*(BuySymbol['balance']/BuySymbol['CumAmunt'])
+        assetInvester['PriceBuy'][i] = round((BuySymbol['FullValue'].sum() + BuySymbol['HalfValue'].sum()) / assetInvester['Balance'][i],0)
+    assetInvester['Profit'] = (assetInvester['final_price'] - assetInvester['PriceBuy']) * assetInvester['Balance']
     assetInvester['ofPortfo'] =(assetInvester['ValueBalance']/assetInvester['ValueBalance'].sum())*100
     assetInvester = assetInvester.fillna(0)
-    print(assetInvester)
+    indsGroup = assetInvester.groupby('inds').sum()['ofPortfo']
+    indsGroup = indsGroup.reset_index().to_dict(orient='records')
     assetInvester = assetInvester.to_dict(orient='records')
-    return json.dumps({'replay':True, 'noInserBuy':noInserBuy, 'assetInvester':assetInvester})
+    if len(assetInvester)>0 and len(noInserBuy)>0: return json.dumps({'replay':True, 'noInserBuy':noInserBuy, 'assetInvester':assetInvester, 'indsGroup':indsGroup, 'name':name})
+    if len(assetInvester)>0 and len(noInserBuy)==0: return json.dumps({'replay':True, 'noInserBuy':False, 'assetInvester':assetInvester, 'indsGroup':indsGroup, 'name':name})
 
 
 
