@@ -240,15 +240,20 @@ def tradersData(username, fromDate, toDate):
     dfSel['price'] = round(dfSel['Value']/dfSel['Volume'],0)
     df = dfBuy.join(dfSel,rsuffix='_sel',lsuffix='_buy',how='outer')
     dateList = list(set(dftrade['Date']))
-    dateList = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in dateList]
+    #dateList = [str(x)[0:4]+'/'+str(x)[4:6]+'/'+str(x)[6:8] for x in dateList]
+
     finallPrice = []
     for d in dateList:
-        url = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={getSymbolTseOfUsername(username)}&time={d}'
+
+        url = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={getSymbolTseOfUsername(username)}&date={d}'
+        print(url)
         d_ = requests.get(url).json()
         d_ = int(d_['final_price']) - int(d_['final_price_change'])
         finallPrice.append(d_)
     finallPrice = sum(finallPrice) / len(finallPrice)
+
     df = df.fillna(0)
+
     df['code'] = df.index
     df['name'] = [CodeToName(x,symbol) for x in df.index]
     df['brk'] ='نامشخص'
@@ -258,10 +263,10 @@ def tradersData(username, fromDate, toDate):
         print(brkcode)
         brkname = farasahm_db['broker'].find_one({'TBKEY':brkcode},{'TBNAME':1,'_id':0})
         if brkname!=None: df['brk'][i]=(brkname['TBNAME'])
-
     dfbalance = dfbalance.set_index('Account')[['Saham']]
     df = df.join(dfbalance,how='left')
     df = df.sort_values(by=['Volume_buy','Volume_sel'],ascending=False)
+
     return json.dumps({'replay':True, 'data':{'table':df.to_dict(orient='record'), 'finallPrice':finallPrice}})
 
 
@@ -394,9 +399,9 @@ def dashbord(username):
 
 def tablo(username,date):
     dateStr = str(date)[0:4]+'/'+str(date)[4:6]+'/'+str(date)[6:8]
-    req = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={getSymbolTseOfUsername(username)}&time={dateStr}'
+    req = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={getSymbolTseOfUsername(username)}&date={dateStr}'
     tabloRequest = requests.get(url=req).json()
-    req = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&market=indices&date={dateStr}'
+    req = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&market=indices&time={dateStr}'
     marketRequest = pd.DataFrame(requests.get(url=req).json())
     industry_rate = marketRequest[marketRequest['code']==tabloRequest['industry_code']].to_dict(orient='records')[0]['percent']
     total_rate = marketRequest[marketRequest['name']=='شاخص كل'].to_dict(orient='records')[0]['percent']
@@ -404,12 +409,17 @@ def tablo(username,date):
     total50_rate = marketRequest[marketRequest['name']=='شاخص قيمت 50 شركت'].to_dict(orient='records')[0]['percent']
     compani_rate = tabloRequest['final_price_change_percent'][:-1]
     dic = {'rate':{'company':compani_rate, 'industry':industry_rate, 'totalw':totalw_rate, 'total':total_rate, 'total50':total50_rate}}
-    req = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&all&type=0&time={dateStr}'
+    req = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&all&type=0&date={dateStr}'
     symbol_industry = pd.DataFrame(requests.get(url=req).json())
     symbol_industry = symbol_industry[symbol_industry['industry_code']==tabloRequest['industry_code']]
     symbol_industry = symbol_industry[['final_price','final_price_change_percent','trade_volume','name']]
     symbol_industry['final_price_change_percent'] = [x.replace('%','') for x in symbol_industry['final_price_change_percent']]
-    symbol_industry = symbol_industry.sort_values(by=['trade_volume'])
+    symbol_industry['trade_volume'] = [int(x) for x in symbol_industry['trade_volume']]
+    symbol_industry = symbol_industry[symbol_industry['trade_volume']>0]
+    symbol_industry = symbol_industry[symbol_industry['trade_volume']>0]
+    symbol_industry['final_price'] = [int(x) for x in symbol_industry['final_price']]
+    symbol_industry['ValueTrade'] = symbol_industry['trade_volume'] * symbol_industry['final_price']
+    symbol_industry = symbol_industry.sort_values(by=['trade_volume'], ascending=False)
     symbol_industry = symbol_industry.to_dict(orient='records')
     return json.dumps({'tablo':tabloRequest, 'ind':dic, 'symbol_industry':symbol_industry})
 
@@ -507,37 +517,3 @@ def detailes(username, account, fromDate, toDate):
     dftrader = dftrader.to_dict(orient='records')
     return json.dumps({'replay':True, 'data':dftrader, 'shortData':shortData})
 
-'''
-username='test1'
-onDate = False
-
-symbol = getSymbolOfUsername(username)
-symbol_db = client[f'{symbol}_db']
-trade_collection = symbol_db['trade']
-if(onDate==False):
-    fromDate = trade_collection.find_one(sort=[("Date", -1)])['Date']
-
-
-dfBalance = pd.DataFrame(symbol_db['balance'].find({},{'_id':0,'Account':1,'Saham':1,'Date':1}))
-dfBalance = dfBalance.pivot_table(index='Date', columns='Account')
-dfBalance = dfBalance['Saham']
-dfBalance = dfBalance.sort_index()
-dfBalance = dfBalance.fillna(method='ffill')
-miss = dfBalance.isnull().sum()
-miss = miss>miss.mean()
-miss = miss[miss==True]
-dfBalance = dfBalance.drop(columns=miss.index)
-dfBalance = dfBalance.fillna(0)
-miss = dfBalance.std()
-miss = miss<miss.mean()/5
-miss = miss[miss==True]
-dfBalance = dfBalance.drop(columns=miss.index)
-dfBalance = dfBalance.corr(method='pearson')
-f = []
-for c in dfBalance.columns:
-    dfBalance[c][c] = 0
-    re = dfBalance[c]
-    re = re.sort_values()
-    re = re[3:]
-    print(re)
-'''

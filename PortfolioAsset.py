@@ -169,12 +169,11 @@ def revenue(username, invester, date):
     noInserBuy['Balance'] = noInserBuy['Balance']*-1
     noInserBuy = noInserBuy.to_dict(orient='records') #send
     TradeInvester = TradeInvester[TradeInvester['Balance']>=0]
-    if len(TradeInvester)==0 and len(noInserBuy)>0:return json.dumps({'replay':True, 'noInserBuy':noInserBuy, 'TradeInvester':False, 'indsGroup':False, 'name':name})
-    if len(TradeInvester)==0 and len(noInserBuy)==0:return json.dumps({'replay':True, 'noInserBuy':False, 'TradeInvester':False, 'indsGroup':False, 'name':name})
+    if len(TradeInvester)==0 and len(noInserBuy)>0:return json.dumps({'replay':True, 'noInserBuy':noInserBuy, 'TradeInvester':False, 'name':name})
+    if len(TradeInvester)==0 and len(noInserBuy)==0:return json.dumps({'replay':True, 'noInserBuy':False, 'TradeInvester':False, 'name':name})
     TradeInvester['full_name'] = ''
     TradeInvester['inds'] = ''
     TradeInvester['market'] = ''
-    TradeInvester['state'] = ''
     TradeInvester['final_price'] = ''
     for i in TradeInvester.index:
         symbol = TradeInvester['symbol'][i].replace('1','')
@@ -183,11 +182,12 @@ def revenue(username, invester, date):
         TradeInvester['full_name'][i] = req['full_name']
         TradeInvester['inds'][i] = req['type']
         TradeInvester['market'][i] = req['market']
-        TradeInvester['state'][i] = req['state']
         TradeInvester['final_price'][i] = int(req['final_price'])
     TradeInvester['ValueBalance'] = TradeInvester['Balance'] * TradeInvester['final_price']
     TradeInvester['PriceBuy'] = round(TradeInvester['ValueBuy'] /TradeInvester['AmuntBuy'])
     TradeInvester['PriceSel'] = round(TradeInvester['ValueSel'] /TradeInvester['AmuntSel'])
-    print(TradeInvester)
-
-    return json.dumps({'o':'o'})
+    TradeInvester['profit'] = (TradeInvester['ValueBalance'] + TradeInvester['ValueSel'])- TradeInvester['ValueBuy']
+    TradeInvester = TradeInvester.fillna(0)
+    TradeInvester = TradeInvester.to_dict(orient='records')
+    if len(TradeInvester)>0 and len(noInserBuy)>0: return json.dumps({'replay':True, 'noInserBuy':noInserBuy, 'TradeInvester':TradeInvester, 'name':name})
+    if len(TradeInvester)>0 and len(noInserBuy)==0: return json.dumps({'replay':True, 'noInserBuy':False, 'TradeInvester':TradeInvester, 'name':name})
