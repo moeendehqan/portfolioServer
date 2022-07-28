@@ -3,7 +3,7 @@ import etf
 from flask import Flask, request
 import json
 from flask_cors import CORS
-
+import setting
 import pymongo
 from timeir import *
 import pandas as pd
@@ -51,7 +51,8 @@ def account():
         portfoli = int(user['portfoli'])>=today()
         eft = int(user['eft'])>=today()
         stocks = int(user['stocks'])>=today()
-        databack = {'portfoli':portfoli, 'eft':eft, 'stocks':stocks}
+        setting = user['mainaccount'] == 'noting'
+        databack = {'portfoli':portfoli, 'eft':eft, 'stocks':stocks, 'setting':setting}
     dic = {'replay':replay, 'msg':msg, 'databack':databack}
     return json.dumps(dic)
 
@@ -214,7 +215,11 @@ def portfoli_asset():
 def portfoli_revenue():
     data = request.get_json()
     return PortfolioAsset.revenue(data['username'],data['invester'],data['date'])
-
+#---------------------------------portfolio--------------------------------------------
+@app.route('/setting/dataaccount',methods = ['POST', 'GET'])
+def setting_dataaccount():
+    data = request.get_json()
+    return setting.dataaccount(data['username'])
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)

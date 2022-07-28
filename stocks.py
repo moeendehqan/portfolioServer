@@ -246,7 +246,7 @@ def tradersData(username, fromDate, toDate):
     for d in dateList:
 
         url = f'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&name={getSymbolTseOfUsername(username)}&date={d}'
-        print(url)
+
         d_ = requests.get(url).json()
         d_ = int(d_['final_price']) - int(d_['final_price_change'])
         finallPrice.append(d_)
@@ -260,7 +260,6 @@ def tradersData(username, fromDate, toDate):
     for i in df.index:
         if df['Value_sel'][i]<df['Value_buy'][i]: brkcode = list(dftrade[dftrade['B_account']==i]['Buy_brkr'])[0]
         else: brkcode = list(dftrade[dftrade['S_account']==i]['Sel_brkr'])[0]
-        print(brkcode)
         brkname = farasahm_db['broker'].find_one({'TBKEY':brkcode},{'TBNAME':1,'_id':0})
         if brkname!=None: df['brk'][i]=(brkname['TBNAME'])
     dfbalance = dfbalance.set_index('Account')[['Saham']]
