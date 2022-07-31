@@ -221,5 +221,39 @@ def setting_dataaccount():
     data = request.get_json()
     return setting.dataaccount(data['username'])
 
+@app.route('/setting/delete',methods = ['POST', 'GET'])
+def setting_delete():
+    data = request.get_json()
+    userCl.delete_one({'username':data['username']})
+    return json.dumps({'replay':True})
+
+@app.route('/setting/editgetdata',methods = ['POST', 'GET'])
+def setting_editgetdata():
+    data = request.get_json()
+    return setting.edtiGetData(data['username'])
+
+@app.route('/setting/add',methods = ['POST', 'GET'])
+def setting_add():
+    data = request.get_json()
+    return setting.add(data['mainaccount'],data['subaccount'],data['fullname'],data['password'])
+
+@app.route('/setting/edit',methods = ['POST', 'GET'])
+def setting_edit():
+    data = request.get_json()
+    return setting.edit(data['subaccount'],data['fullname'],data['password'])
+
+@app.route('/setting/acc',methods = ['POST', 'GET'])
+def setting_acc():
+    data = request.get_json()
+    return setting.acc(data['username'])
+
+
+@app.route('/setting/change',methods = ['POST', 'GET'])
+def setting_change():
+    data = request.get_json()
+    print(data)
+    return setting.change(data)
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)
