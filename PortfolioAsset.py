@@ -1,5 +1,7 @@
 
+from dataclasses import replace
 import json
+import math
 import pandas as pd
 import pymongo
 from general import *
@@ -11,80 +13,123 @@ portfolio = client['portfolio']
 
 
 def uploadTradFile(file,username):
-    '''
-    این تابع برای بروز رسانی معاملات به صورت گروهی و توسط فایلی که توسط سامانه ارائه میشود  میباشد
-    file: فایل آپلود شده در فرانت به با فرمت اکسلی
-    username: نام کاربری که اقدام به بارگذاری کرده
-    '''
-    print(file)
-    inp = pd.read_excel(file)
-    requisiteColumns = ['تاریخ معامله','نوع معامله','کد بورسی','شناسه ملی','عنوان مشتری','نام شعبه','نام شعبه مشتری','نماد','نماد سپرده گذاری','تعداد','قیمت','ارزش معامله','گروه مشتری']
-    checkRequisiteColumns = len([x for x in requisiteColumns if x in inp.columns]) == 13
-    if checkRequisiteColumns:
-        inp = inp[requisiteColumns]
-        inp['شناسه ملی'] = inp['شناسه ملی'].fillna(0)
-        inp['عنوان مشتری'] = inp['عنوان مشتری'].fillna(inp['کد بورسی'])
-        inp['نام شعبه'] = inp['نام شعبه'].fillna('-')
-        inp['نام شعبه مشتری'] = inp['نام شعبه مشتری'].fillna('-')
-        inp['نماد سپرده گذاری'] = inp['نماد سپرده گذاری'].fillna(inp['نماد'])
-        inp['گروه مشتری'] = inp['گروه مشتری'].fillna('-')
-        inp['تاریخ معامله عددی'] = [x.replace('/','') for x in inp['تاریخ معامله']]
-        inp['تاریخ معامله عددی'] = [int(x) for x in inp['تاریخ معامله عددی']]
-        missColumns = inp.isnull().sum().sum()
-        if missColumns == 0:
-            date = set(inp['تاریخ معامله'])
-            for i in date:
-                checkDuplicate = len(list(portfolio[username+'_'+'trad'].find({'تاریخ معامله':i})))>0
-                if checkDuplicate:
-                    portfolio[username+'_'+'trad'].delete_many({'تاریخ معامله':i})
-            portfolio[username+'_'+'trad'].insert_many(inp.to_dict(orient='records'))
-            theresponse = True
-            msg = 'اطلاعات بروز شد'
-        else:
-            theresponse = False
-            msg='برخی سلول ها خالی هستند'
-    else:
-        theresponse = False
-        msg = 'تمام ستون های مورد نیاز موجود نیست'
-    return json.dumps({'replay':theresponse, 'msg':msg, 'databack':''})
+    user = client['farasahm']['user'].find_one({'username':username},{'_id':0})
+    if user['mainaccount'] != 'noting':
+        user = client['farasahm']['user'].find_one({'username':user['mainaccount']},{'_id':0})
+    inp = pd.read_excel(file,header=3)
+    requisiteColumns = ['نام','نام خانوادگی','نماد','حجم','کد بورسی','نام سهم']
+    checkRequisiteColumns = len([x for x in requisiteColumns if x in inp.columns]) == 6
+    if checkRequisiteColumns==False:
+        return json.dumps({'replay':False, 'msg':'تمام ستون های مورد نیاز موجود نیست'})
+    inp = inp[requisiteColumns]
+    inp = inp[inp['نام']!='جمع کل']
+    inp['سرمایه گذار'] = inp['نام'].replace("'","") + inp['نام خانوادگی']
+    inp['کد بورسی'] = [x.replace("*","") for x in inp['کد بورسی']]
+    inp = inp[['سرمایه گذار','کد بورسی','حجم','نماد','نام سهم']]
+    missColumns = inp.isnull().sum().sum()
+    if missColumns > 0:
+        return json.dumps({'replay':False, 'msg':'برخی سلول ها خالی هستند'})
+    InvCntAdd =  len(set(inp['کد بورسی']))
+    if InvCntAdd>user['portfoliolimitinv']:
+        return json.dumps({'replay':False, 'msg':'تعداد سرمایه گذار ها بیش از حد مجاز است'})
+    inp.columns = ['inv','code','volume','symbol','stocks']
+    inp['act'] = 'buy'
+    inp['status'] = 'Check'
+    inp['date'] = ''
+    inp['price'] = ''
+    comdoct = pd.DataFrame(portfolio[user['username']+'_'+'trad'].find({'status':'comformtion'},{'_id':0}))
+    if len(comdoct)==0:
+        inp = inp.to_dict(orient='records')
+        portfolio[user['username']+'_'+'trad'].insert_many(inp)
+        return CheckDoctOne(username)
+    
+    comdoct = comdoct.groupby(['code','symbol']).sum()
+    inp = inp.set_index(['code','symbol'])
+    df = comdoct.join(inp,rsuffix='_cheack', lsuffix='_comform',how='outer').reset_index()
+    df['volume_comform'] = [float(x) for x in df['volume_comform']]
+    df['volume_cheack'] = [float(x) for x in df['volume_cheack']]
+    for i in df.index:
+        if str(df['volume_comform'][i]) == 'nan': df['volume_comform'][i] = 0
+        if str(df['volume_cheack'][i]) == 'nan': df['volume_cheack'][i] = 0
+    df['volume_comform'] = df['volume_cheack'] - df['volume_comform']
+    df = df[df['volume_comform']!=0]
+    if len(df)==0:
+        return CheckDoctOne(username)
+    df = df.drop(columns=['volume_cheack'])
+    df.columns = ['code', 'symbol', 'volume', 'inv', 'stocks', 'act', 'status','date', 'price']
+    print(df.columns)
+    df['date'] = ''
+    df['status'] = 'Check'
+    df['price'] = ''
+    for i in df.index:
+        if df['volume'][i] > 0: df['act'][i] = 'buyinc'
+        else: df['act'][i] = 'sel'
+    df = df.to_dict(orient='records')
+    portfolio[user['username']+'_'+'trad'].insert_many(df)
+    return CheckDoctOne(username)
+
+def CheckDoctOne(username):
+    user = client['farasahm']['user'].find_one({'username':username},{'_id':0})
+    if user['mainaccount'] != 'noting':
+        user = client['farasahm']['user'].find_one({'username':user['mainaccount']},{'_id':0})
+    df = list(portfolio[user['username']+'_'+'trad'].find({"status":"Check"},{'_id':0}))
+    if len(df)==0:
+        return json.dumps({'replay':True, 'df':None, 'len':None})
+    return json.dumps({'replay':True, 'df':df[0], 'len':len(df)})
+    
+def confdoct(username,stocks,act,price,date):
+    df = stocks
+    df['act']=act
+    df['price']=price
+    df['date']=date
+    df['status']='comformtion'
+    portfolio[username+'_'+'trad'].delete_one({'inv':df['inv'],'code':df['code'],'volume':df['volume'],'symbol':df['symbol'],'status':'Check'})
+    portfolio[username+'_'+'trad'].insert_one(df)
+    return json.dumps({'replay':True})
+
+def deldoct(username,stocks):
+    portfolio[username+'_'+'trad'].delete_one(stocks)
+    return json.dumps({'replay':True})
+
+
+
+
+
+
+
+
 
 
 def investorlist(username):
-    inv = pd.DataFrame(portfolio[username+'_'+'trad'].find({},{'_id':0, 'کد بورسی':1, 'عنوان مشتری':1})).drop_duplicates()
+    inv = pd.DataFrame(portfolio[username+'_'+'trad'].find({},{'_id':0, 'inv':1, 'code':1})).drop_duplicates()
+    print(inv)
     inv.columns = ['code','name']
     inv= inv.to_dict(orient='records')
     return json.dumps({'df':inv})
 
 def symbolelist():
     url = 'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&all&type=2'
-    responset = pd.DataFrame(requests.get(url=url).json())[['name']]
+    responset = pd.DataFrame(requests.get(url=url).json())[['name','full_name']]
     url = 'https://sourcearena.ir/api/?token=6e437430f8f55f9ba41f7a2cfea64d90&closed_symbols'
-    try:responset = responset.append(pd.DataFrame(requests.get(url=url).json())[['name']]).to_dict(orient='record')
-    except:responset = responset.to_dict(orient='record')
+    try:
+        responset = responset.append(pd.DataFrame(requests.get(url=url).json())[['name','full_name']]).to_dict(orient='records')
+    except:
+        responset = responset.to_dict(orient='records')
     return json.dumps(responset)
 
-def updatemanual(username,date,invester,side,symbol,price,amunt):
+def updatemanual(username,date,investername,invester,side,fullname,symbol,price,amunt):
     try:
         personal = portfolio[username+'_'+'trad'].find_one({'کد بورسی':invester})
-        lastSymbol = portfolio[username+'_'+'trad'].find_one({'نماد':symbol})
-        if lastSymbol==None: lastSymbol = portfolio[username+'_'+'trad'].find_one({'نماد':symbol+'1'})
-        dic = {'تاریخ معامله':str(date)[0:4]+'/'+str(date)[4:6]+'/'+str(date)[6:8]}
-        if side=='buy': dic['نوع معامله'] = 'خرید'
-        else: dic['نوع معامله'] = 'فروش'
-        dic['کد بورسی'] = invester
-        dic['شناسه ملی'] = personal['شناسه ملی']
-        dic['عنوان مشتری'] = personal['عنوان مشتری']
-        dic['نام شعبه'] = personal['نام شعبه']
-        dic['نام شعبه مشتری'] = personal['نام شعبه مشتری']
-        dic['نام شعبه مشتری'] = personal['نام شعبه مشتری']
-        dic['نماد'] = lastSymbol['نماد']
-        dic['نماد سپرده گذاری'] = lastSymbol['نماد سپرده گذاری']
-        dic['تعداد'] = amunt
-        dic['قیمت'] = price
-        dic['ارزش معامله'] = int(price)*int(amunt)
-        dic['گروه مشتری'] = personal['گروه مشتری']
-        dic['گروه مشتری'] = personal['گروه مشتری']
-        dic['تاریخ معامله عددی'] = date
+        dic = {'date':date}
+        dic['inv'] = investername
+        dic['code'] = invester
+        dic['volume'] = amunt
+        dic['symbol'] = symbol
+        dic['stocks'] = fullname
+        dic['act'] = side
+        dic['act'] = side
+        dic['status'] = 'comformtion'
+        dic['price'] = price
         portfolio[username+'_'+'trad'].insert_one(dic)
         return json.dumps({'replay':True})
     except:

@@ -192,6 +192,24 @@ def portfoli_update():
     username = request.form.get('username')
     return PortfolioAsset.uploadTradFile(request.files['TBS'],username)
 
+@app.route('/portfolio/cheackdoct',methods = ['POST', 'GET'])
+def portfoli_cheackdockt():
+    data = request.get_json()
+    return PortfolioAsset.CheckDoctOne(data['username'])
+
+@app.route('/portfolio/confdoct',methods = ['POST', 'GET'])
+def portfoli_confdoct():
+    data = request.get_json()
+    return PortfolioAsset.confdoct(data['username'],data['stocks'],data['act'],data['price'],data['date'])
+
+@app.route('/portfolio/deldoct',methods = ['POST', 'GET'])
+def portfoli_deldoct():
+    data = request.get_json()
+    return PortfolioAsset.deldoct(data['username'],data['stocks'])
+
+
+
+
 @app.route('/portfolio/investorlist',methods = ['POST', 'GET'])
 def portfoli_investorlist():
     data = request.get_json()
@@ -204,7 +222,7 @@ def portfoli_symbolelist():
 @app.route('/portfolio/updatemanual',methods = ['POST', 'GET'])
 def portfoli_updatemanual():
     data = request.get_json()
-    return PortfolioAsset.updatemanual(data['username'],data['date'],data['invester'],data['side'],data['symbol'],data['price'],data['amunt'])
+    return PortfolioAsset.updatemanual(data['username'],data['date'],data['investername'],data['invester'],data['side'],data['fullname'],data['symbol'],data['price'],data['amunt'])
 
 @app.route('/portfolio/asset',methods = ['POST', 'GET'])
 def portfoli_asset():
